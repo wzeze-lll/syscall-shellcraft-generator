@@ -134,15 +134,8 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
 
   <!-- 简介 -->
   <div class="card">
-    <h2>这是什么 / 怎么用</h2>
-    <ul class="intro-list">
-      <li>写 PWN shellcode 时用的查表 + 拼链工具：不用再翻表、不用手算寄存器，查完直接出能往 exploit 里贴的代码骨架。</li>
-      <li>输调用名或调用号，查 amd64 / i386 的调用号和参数，顺带提示寄存器顺序（amd64 是 <code>rax/rdi/rsi/rdx/r10/r8/r9</code>）。</li>
-      <li>拼多步调用链，自动标每步 rax 变成了什么；填了 seccomp 白名单后，名单外的调用标红。</li>
-      <li>按白名单直接生成一整段只用名单内调用的 shellcode。</li>
-      <li>ROP 链模式：选 4.1 / 4.2 / 4.3 / 4.1a / 4.2a 模板，填 offset 和 gadget 地址，拼出 <code>flat()</code> 链。</li>
-      <li>还有填空练习和常量速查（fd、mmap prot/flags、open flags 这些）。</li>
-    </ul>
+    <h2>这是干什么的</h2>
+    <p style="margin:0;font-size:14px;line-height:1.65">写 PWN 的 exp 时，查系统调用号、记参数顺序和走哪个寄存器、拼 shellcraft 调用链、拼 ROP 链，都要翻 man、翻表、翻笔记。这个页面把这些事收到一处：选架构 → 搜调用 → 按提示填参数 → 直接生成能粘进 exp 的 pwntools 代码，seccomp 白名单检查和 ROP 链模板也在同一页。</p>
   </div>
 
   <!-- 搜索 -->
