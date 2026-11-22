@@ -193,7 +193,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
   <!-- seccomp 白名单 -->
   <div class="card">
     <h2>③ seccomp 白名单检查 <span>填了才检查；不在名单里的调用会被标红</span></h2>
-    <label class="flabel" for="wlInput">这道题放行的调用（填调用号或名字，逗号/空格隔开，如 1,2,9 或 open,mmap,write）。填完点下面「按白名单直接生成工具链」，就能直接拿到一整段只用名单内调用的 shellcode</label>
+    <label class="flabel" for="wlInput">这道题放行的调用（填调用号或名字，逗号/空格隔开，如 1,2,9 或 open,mmap,write）。填完点下面「按白名单直接生成工具链」，就能生成一整段只用名单内调用的 shellcode 骨架，填实参数、回 VM 对真题跑通才算数</label>
     <input type="text" id="wlInput" placeholder="如 open,mmap,write 或对应调用号 —— 不填 = 不检查" autocomplete="off" autocapitalize="off" spellcheck="false">
     <div class="quick">
       <button data-wl-preset="mmap">open / mmap / write {2,9,1}</button>
@@ -1719,7 +1719,7 @@ function wlGenChain(){
     chain=[{name:"execve",nr:ev.nr,code:"sc += shellcraft.pushstr('/bin/sh')\n"+buildCode(ev,["'rsp'","0","0"]),rax:raxAfter("execve"),vals:["'rsp'","0","0"],strVal:"/bin/sh"}];
   }
   renderChain();
-  show("<b>已按白名单生成："+label+"</b>，只用了名单内的调用。整段代码在下面 ④ 拼链区，点「复制整段 shellcode」就能直接拿走用（文件名默认 flag，在链里第一步改）。");
+  show("<b>已按白名单生成："+label+"</b>，只用了名单内的调用。整段代码在下面 ④ 拼链区，点「复制整段 shellcode」就能复制走（文件名默认 flag，在链里第一步改），回 VM 对真题跑通才算数。");
   toast("已生成工具链："+label);
   $("chainBox").scrollIntoView({behavior:"smooth",block:"nearest"});
 }
