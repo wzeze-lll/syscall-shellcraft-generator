@@ -122,12 +122,28 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
 .rop-step{border:1px solid var(--line);border-radius:12px;padding:9px 12px;margin-top:8px;background:var(--card2);font-size:13px}
 .rop-step b{font-family:ui-monospace,monospace}
 .rop-step .rs-regs{font-family:ui-monospace,monospace;font-size:12.5px;color:var(--muted);margin-top:2px;word-break:break-all}
+.intro-list{margin:0;padding-left:20px;font-size:13.5px}
+.intro-list li{margin:3px 0}
+.intro-list code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:var(--chip);padding:1px 5px;border-radius:5px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>查表生成器</h1>
   <p class="sub" id="subLine">x64 系统调用表 → <code>shellcraft.amd64.linux.syscall(...)</code>。顺序固定：<code>rax=NR, rdi, rsi, rdx, r10, r8, r9</code>（第 4 个参数是 r10，不是 rcx）。</p>
+
+  <!-- 简介 -->
+  <div class="card">
+    <h2>这是什么 / 怎么用</h2>
+    <ul class="intro-list">
+      <li>写 PWN shellcode 时用的查表 + 拼链工具：不用再翻表、不用手算寄存器，查完直接出能往 exploit 里贴的代码骨架。</li>
+      <li>输调用名或调用号，查 amd64 / i386 的调用号和参数，顺带提示寄存器顺序（amd64 是 <code>rax/rdi/rsi/rdx/r10/r8/r9</code>）。</li>
+      <li>拼多步调用链，自动标每步 rax 变成了什么；填了 seccomp 白名单后，名单外的调用标红。</li>
+      <li>按白名单直接生成一整段只用名单内调用的 shellcode。</li>
+      <li>ROP 链模式：选 4.1 / 4.2 / 4.3 / 4.1a / 4.2a 模板，填 offset 和 gadget 地址，拼出 <code>flat()</code> 链。</li>
+      <li>还有填空练习和常量速查（fd、mmap prot/flags、open flags 这些）。</li>
+    </ul>
+  </div>
 
   <!-- 搜索 -->
   <div class="card">
