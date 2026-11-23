@@ -1664,6 +1664,8 @@ var FD_PRODUCERS={open:1,openat:1,openat2:1,socket:1,accept:1,accept4:1,dup:1,du
 var ADDR_PRODUCERS={mmap:1,mmap2:1,brk:1,mremap:1,shmat:1};
 function isSaveStep(s){ return s && s.isSave; }
 // 插入保存步时挑寄存器：先看链里已有的保存步占了哪些，再避开后续步骤参数里实际用到的寄存器，
+// 以及后续步骤生成代码里出现过的候选寄存器（清空参数框时 buildFullCode 会自动生成 mov r13, rsp 之类的代码，
+// 只扫参数值看不到，挑中它保存的值会被那句代码盖掉）。
 // amd64 从 r12、r13、r14、r15 里挑第一个未用的，i386 从 esi/edi/ebp 里挑。都占满时回退到第一个候选。
 function pickSaveReg(afterIdx){
   var cands=arch==="i386" ? ["esi","edi","ebp"] : ["r12","r13","r14","r15"];
@@ -1672,7 +1674,9 @@ function pickSaveReg(afterIdx){
     if(isSaveStep(s)){ var m=/mov\s+([a-z0-9]+),/.exec(s.code||""); if(m) used[m[1]]=1; }
   });
   for(var k=afterIdx+1;k<chain.length;k++){
-    var s=chain[k]; if(!s||isSaveStep(s)||!s.vals) continue;
+    var s=chain[k]; if(!s) continue;
+    if(s.code){ var codeStr=String(s.code); cands.forEach(function(c){ if(new RegExp("\\b"+c+"\\b").test(codeStr)) used[c]=1; }); }
+    if(isSaveStep(s)||!s.vals) continue;
     s.vals.forEach(function(v){ var r=(v||"").trim().replace(/^'|'$/g,""); if(r) used[r]=1; });
   }
   for(var j=0;j<cands.length;j++){ if(!used[cands[j]]) return cands[j]; }
