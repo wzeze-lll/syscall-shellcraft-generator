@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
-function load() {
+function load(script = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'), initialize = false) {
   const nodes = new Map();
   function node(id) {
     if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', innerHTML: '', style: {},
@@ -21,8 +21,7 @@ function load() {
   const c = { TextEncoder, document: { getElementById: node, querySelectorAll(){return [];}, addEventListener(){} },
     navigator: {}, setTimeout(){}, console };
   vm.createContext(c);
-  const script = /<script>([\s\S]*?)<\/script>/.exec(html)[1];
-  vm.runInContext(script.replace(/selectByName\("write"\);\s*$/, ''), c);
+  vm.runInContext(initialize ? script : script.replace(/selectByName\("write"\);\s*$/, ''), c);
   c.node = node;
   return c;
 }
@@ -78,4 +77,24 @@ test('ROP step text displays angle brackets instead of parsing HTML', () => {
   c.ropGen();
   assert.doesNotMatch(c.node('ropSteps').innerHTML, /<tag>/);
   assert.match(c.node('ropSteps').innerHTML, /&lt;/);
+});
+
+test('static entry point loads local compiled assets and initializes write', () => {
+  assert.match(html, /<script src="app\.js"><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="style\.css">/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.ok(fs.statSync(path.join(__dirname, 'style.css')).size > 0);
+  const c = load(undefined, true);
+  assert.equal(c.cur.name, 'write');
+  assert.equal(c.node('q').value, 'write');
+});
+test('chain presets use the active architecture', () => {
+  const c=load();
+  for(const arch of ['amd64','i386']) {
+    c.arch=arch; c.SYS=c[arch==='amd64'?'SYS64':'SYS32'];
+    c.preset([['read',['0',"'rsp'",'0x100']],['write',['1',"'rsp'",'0x100']]]);
+    assert.deepEqual(Array.from(c.chain,s=>s.nr),arch==='amd64'?[0,1]:[3,4]);
+    assert.match(c.node('chainCode').textContent,new RegExp('shellcraft\\.'+arch+'\\.linux'));
+    assert.throws(()=>c.requireSys('not_a_syscall'),/Syscall unavailable/);
+  }
 });

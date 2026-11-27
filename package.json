@@ -1,0 +1,17 @@
+{
+  "name": "syscall-shellcraft-generator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Linux syscall lookup and shellcraft/ROP generator for amd64 and i386",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test generator.test.cjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

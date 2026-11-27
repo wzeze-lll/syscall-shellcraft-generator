@@ -4,7 +4,9 @@
 
 **[在线使用](https://wzeze-lll.github.io/syscall-shellcraft-generator/)** · [查看源码](index.html) · [配套 CTF 题解](https://github.com/wzeze-lll/CTF-Writeups)
 
-纯静态单页，使用 HTML、CSS 和原生 JavaScript 编写。下载后直接用浏览器打开 `index.html` 即可离线使用，无需安装依赖或配置服务。
+纯静态网页，使用 **TypeScript + HTML + CSS** 编写，启用 TypeScript 严格类型检查。浏览器运行仓库内已编译的 `app.js`，无需后端服务或运行时依赖。
+
+在线直接打开上方链接；离线使用时下载整个仓库并解压，再打开 `index.html`。请保留同目录下的 `app.js` 和 `style.css`，仅下载 HTML 文件无法加载完整功能。
 
 ## 功能一览
 
@@ -70,20 +72,31 @@
 
 ```text
 syscall-shellcraft-generator/
-├── index.html   # 界面、调用表、参数提示与代码生成逻辑
-├── README.md    # 项目介绍与使用说明
-└── generator.test.cjs  # 生成逻辑回归检查
+├── index.html          # 页面结构
+├── style.css           # 页面样式
+├── app.ts              # TypeScript 源码：调用表、提示、查找与生成逻辑
+├── app.js              # tsc 编译产物，供浏览器和 GitHub Pages 直接加载
+├── tsconfig.json       # strict 类型检查与编译设置
+├── package.json        # 开发命令与固定版本的 TypeScript 依赖
+├── package-lock.json   # 锁定开发依赖
+├── generator.test.cjs  # 生成逻辑与页面资源回归检查
+└── README.md
 ```
 
 ## 开发检查
 
-需要支持 `node:test` 的 Node.js 和 Python 3：
+开发需要 Node.js 18+、npm 和 Python 3；日常使用网页无需安装这些工具。
 
 ```bash
-node --test generator.test.cjs
+npm ci                 # 首次开发时安装锁定的编译器
+npm run typecheck      # TypeScript 严格类型检查，不生成文件
+npm run build          # 将 app.ts 编译成 app.js
+npm test               # 重新编译并运行回归检查
 ```
 
-检查覆盖 UTF-8 分块、输入终止条件提示、十六进制精确查找、五种 ROP 模板在不同输入方式下的 Python 语法与发送方式，以及部分核心 ABI 映射。测试在最小 DOM 替身中运行生成逻辑，并不启动题目进程，也不代表真实题目利用通过。
+修改逻辑时编辑 `app.ts`，运行构建后一起提交 `app.ts` 与 `app.js`；请勿直接修改编译产物。`index.html` 使用普通 script 加载 `app.js`，支持本地 file:// 打开；GitHub Pages 直接发布根目录，无需在线编译。
+
+检查覆盖 UTF-8 分块、输入终止条件提示、十六进制精确查找、五种 ROP 模板在不同输入方式下的 Python 语法与发送方式，以及部分核心 ABI 映射。另外检查页面引用的资源是否存在、默认 write 是否能初始化，以及预设调用链在两种架构下是否能生成。测试在最小 DOM 替身中运行编译后的生成逻辑，并不启动题目进程，也不代表真实题目利用通过。
 
 ## 对照资料
 
@@ -95,3 +108,5 @@ node --test generator.test.cjs
 结合具体题目阅读与复盘，可查看 [CTF-Writeups](https://github.com/wzeze-lll/CTF-Writeups) 中的逆向、栈、堆和内核题目。
 
 输入行为对照：[gets(3)](https://man7.org/linux/man-pages/man3/gets.3.html)、[strcpy(3)](https://man7.org/linux/man-pages/man3/strcpy.3.html)、[read(2)](https://man7.org/linux/man-pages/man2/read.2.html)。
+
+TypeScript 迁移与编译设置参考：[官方迁移指南](https://www.typescriptlang.org/docs/handbook/migrating-from-javascript.html)、[strict 配置](https://www.typescriptlang.org/tsconfig/strict.html)。
