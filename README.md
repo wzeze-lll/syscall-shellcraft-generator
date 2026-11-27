@@ -1,25 +1,84 @@
-# syscall-shellcraft-generator
+# 查表生成器 · Syscall & Shellcraft
 
-Linux 系统调用查表与 shellcraft 生成器（静态单页）。在线用：https://wzeze-lll.github.io/syscall-shellcraft-generator/ ；也可以直接打开 `index.html`，无需安装、无需联网。
+面向 CTF / PWN 学习的 Linux 系统调用查表与代码生成工具。选架构、查调用、填参数，把调用号、寄存器、shellcraft 调用链和 ROP 模板放在同一页对照。
 
-## 这是干什么的
+**[在线使用](https://wzeze-lll.github.io/syscall-shellcraft-generator/)** · [查看源码](index.html) · [配套 CTF 题解](https://github.com/wzeze-lll/CTF-Writeups)
 
-写 PWN 的 exp 时，查系统调用号、记参数顺序和走哪个寄存器、拼 shellcraft 调用链、拼 ROP 链，都要翻 man、翻表、翻笔记。这个页面把这些事收到一处：选架构 → 搜调用 → 按提示填参数 → 直接生成能粘进 exp 的 pwntools 代码，seccomp 白名单检查和 ROP 链模板也在同一页。
+纯静态单页，使用 HTML、CSS 和原生 JavaScript 编写。下载后直接用浏览器打开 `index.html` 即可离线使用，无需安装依赖或配置服务。
 
-## 功能
+## 功能一览
 
-- **查表**：amd64 / i386 系统调用表，按名字或调用号搜索，显示调用号、参数顺序与寄存器。amd64 表 369 条；i386 字面 380 条、去重后有效 410 条。有名无实现、调用只返回 `-ENOSYS` 的号已标注或剔除（amd64 17 个；i386 的 149 `_sysctl`、253 `lookup_dcookie` 已剔除）。
-- **生成 shellcraft**：按参数填值，实时生成 `shellcraft.<arch>.linux.syscall(...)` 代码，可拼多步调用链（自动带上一步的 fd / buf / count；字符串参数自动生成 pushstr）。
-- **seccomp 白名单检查**：填放行调用号，生成时标出不在名单里的调用；支持一键生成白名单内的整条链（open → mmap → write、open → read → write）。
-- **ROP 链模式**：i386 `int 0x80` 的 read → BSS → execve（4.1）、写 `/bin/sh` 到 BSS 再 execve（4.2），amd64 `syscall` execve（4.3），另有 amd64 的 4.1a / 4.2a 变体。按 gadget 地址与 offset 生成 pwntools 代码，带 `\x00` 数量警告、两次发送可调延迟（默认 0.3s）、单 pop 回退方案和 12 项核对清单。4.2 示例 gadget 地址由用户提供、未验证；4.3 与 4.1a / 4.2a 的地址全是 0 占位，按目标重测后填。
-- **练习与常量速查**：填空练习、常用常量（PROT / MAP 标志等）。
+| 功能 | 使用方式 | 页面提供的结果 |
+| --- | --- | --- |
+| 系统调用查表 | 选择 amd64 / i386，搜索调用名或调用号 | 调用号、参数签名与寄存器对应关系 |
+| shellcraft 代码生成 | 按参数提示填值 | `shellcraft.<arch>.linux.syscall(...)` 代码骨架，支持字符串压栈 |
+| 多步调用链 | 添加单个调用，或选择内置示例 | 串联多步代码，显示返回值去向及被覆盖的提醒 |
+| seccomp 辅助检查 | 手动填写允许的调用号或名称，以及可选参数限制 | 名单外调用标红、部分参数限制标黄，支持按名单生成链骨架 |
+| ROP 模板 | 选择模板，填写 offset、BSS 和 gadget 地址 | pwntools `flat()` 链骨架、NUL 字节提示与核对清单 |
+| 填空练习 | 在 amd64 练习区填写寄存器与调用参数 | 对照检查与错误提示 |
+| 常量速查 | 查看 fd、PROT、MAP、open flags、mode 等 | 点击常量填入上一个选中的参数框 |
 
-## 使用
+## 快速开始
 
-浏览器打开在线地址或本地 `index.html` 即可。先选架构（amd64 / i386），搜调用名或调用号，照提示把参数填进框里，生成的代码复制到 exp 里用。
+1. 先选架构：`amd64 · syscall` 或 `i386 · int 0x80`。
+2. 输入 `read`、`write`、`mmap` 等名称，或对应架构的调用号。
+3. 对照参数签名与寄存器说明填值；地址、大小和文件描述符取自自己的目标程序。
+4. 查看实时生成的代码；需要组合多步时，点击“＋ 加到链里”。
+5. 把代码放入对应架构的 pwntools 环境，在本地题目中检查实际返回值、内存与收发过程。
 
-## 说明
+```text
+选架构 → 搜调用 → 看参数与寄存器 → 填值
+                                      ↓
+                     生成单步代码 / 加入调用链
+                                      ↓
+                      在目标环境汇编、调试和验证
+```
 
-- 调用号对照内核 `unistd_64.h` / `unistd_32.h` 与 `syscall_64.tbl` / `syscall_32.tbl` 核对。
-- clone 的裸系统调用参数顺序：amd64 为 `flags, stack, parent_tid, child_tid, tls`；i386 为 `flags, stack, parent_tid, tls, child_tid`（与 glibc 包装函数顺序不同）。
-- 生成的代码为静态模板，需按目标程序的 gadget 地址、offset、BSS 地址填参，并在虚拟机里实测通过才算可用；页面本身未经 VM 真题全量验证。
+页面生成代码文本；使用生成结果进行汇编或运行时，仍需在自己的 Python 环境中使用 pwntools。
+
+## 调用链与白名单
+
+内置 `open → read → write` 和 `open → mmap → write` 示例，便于观察 fd、缓冲区地址、长度与返回值如何传递。
+
+在“seccomp 白名单检查”中填写调用名称或调用号，用逗号或空格分隔；也可以选择预设，再点击“按白名单直接生成工具链”。切换架构后，应按新架构重新确认调用号和参数。
+
+这里检查的是**手动输入的条件**。页面没有读取或执行目标程序的 seccomp BPF；生成链在真实程序中能否执行，还取决于规则、参数、调用结果和内存状态。未设置名单时，页面跳过这项检查。
+
+## ROP 模板
+
+| 模板 | 架构 | 链的用途 |
+| --- | --- | --- |
+| 4.1 | i386 | `read` 读到 BSS，再调用 `execve` |
+| 4.2 | i386 | 用写内存 gadget 放入 `/bin/sh`，再调用 `execve` |
+| 4.3 | amd64 | 使用 `syscall` 的 `execve` 链 |
+| 4.1a | amd64 | `read → BSS → execve` 的 amd64 版本 |
+| 4.2a | amd64 | 写入 `/bin/sh → execve` 的 amd64 版本 |
+
+填写输入到返回地址的 offset、可写地址和对应 gadget 后，页面按模板生成代码。支持组合 pop 与单 pop 的选择，并提供两阶段发送延迟、NUL 字节数量提示和核对清单。
+
+示例地址和 `0` 占位值需要按当前 ELF 替换。4.2 中保留的示例 gadget 地址未获动态验证；生成结果按 **STATIC_ONLY** 使用，不能据此认定已在某道题目中跑通。
+
+## 架构与数据范围
+
+- 当前覆盖 Linux amd64 与 i386；调用号和参数寄存器按架构分开处理。
+- 查表数据与参数提示内置在页面中；新增调用、旧 ABI 与特定内核配置仍应对照目标系统核验。
+- 部分无实现、返回 `ENOSYS` 的调用已剔除或标注，具体范围见页面中的表注。
+- `clone` 等调用有架构差异；裸系统调用的参数顺序也可能与 libc 包装函数不同，填写前查看参数说明。
+- 字符串指针、结构体、数组和运行时返回地址需要结合程序准备；自动填充与提示不能代替目标环境检查。
+
+## 文件结构
+
+```text
+syscall-shellcraft-generator/
+├── index.html   # 界面、调用表、参数提示与代码生成逻辑
+└── README.md    # 项目介绍与使用说明
+```
+
+## 对照资料
+
+- [Linux x86-64 系统调用号表](https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_64.tbl)
+- [Linux i386 系统调用号表](https://github.com/torvalds/linux/blob/master/arch/x86/entry/syscalls/syscall_32.tbl)
+- [Linux man-pages：syscall(2)](https://man7.org/linux/man-pages/man2/syscall.2.html)
+- [pwntools：shellcraft 文档](https://docs.pwntools.com/en/stable/shellcraft.html)
+
+结合具体题目阅读与复盘，可查看 [CTF-Writeups](https://github.com/wzeze-lll/CTF-Writeups) 中的逆向、栈、堆和内核题目。
