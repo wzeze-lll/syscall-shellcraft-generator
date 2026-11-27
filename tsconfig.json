@@ -13,6 +13,7 @@
     "outFile": "app.js"
   },
   "files": [
+    "exp.ts",
     "app.ts"
   ]
 }

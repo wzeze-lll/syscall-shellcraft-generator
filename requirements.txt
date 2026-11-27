@@ -1,0 +1,2 @@
+# Optional local ELF inspection; the webpage itself has no Python dependency.
+pwntools==4.15.0

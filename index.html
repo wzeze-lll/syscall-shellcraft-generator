@@ -5,39 +5,117 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="data:,">
-<title>查表生成器</title>
+<title>PwnWorkbench · PWN 脚本工作台</title>
+<meta name="description" content="PwnWorkbench：结合 ELF 信息与函数线索生成独立 pwntools 脚本，提供 ROP 模板、系统调用和 shellcraft 查表。">
+<meta name="description" content="Linux amd64 / i386 系统调用速查，shellcraft 调用链与 ROP 模板。">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<a class="skip-link" href="#lookup">跳到系统调用</a>
 <div class="wrap">
-  <h1>查表生成器</h1>
-  <p class="sub" id="subLine">x64 系统调用表 → <code>shellcraft.amd64.linux.syscall(...)</code>。顺序固定：<code>rax=NR, rdi, rsi, rdx, r10, r8, r9</code>（第 4 个参数是 r10，不是 rcx）。</p>
+  <header class="site-header" id="top">
+    <a class="brand" href="#top"><span class="brand-mark">pw</span><span>PwnWorkbench<span class="brand-sub">ROP / SYSCALL / PWNTOOLS</span></span></a>
+    <div class="header-actions"><button class="theme-toggle" id="themeToggle" type="button" aria-label="切换到深色模式" aria-pressed="false">深色</button>
+    <a class="source-link" href="https://github.com/wzeze-lll/syscall-shellcraft-generator" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a></div>
+  </header>
+  <div class="workbench">
+    <aside class="sidebar">
+      <p class="nav-label">工具目录</p>
+      <nav aria-label="工具目录">
+        <a href="#exp"><span>01</span>EXP 脚本</a>
+        <a href="#lookup"><span>02</span>系统调用</a>
+        <a href="#seccomp"><span>03</span>seccomp</a>
+        <a href="#chain"><span>04</span>调用链</a>
+        <a href="#rop"><span>05</span>ROP 模板</a>
+        <a href="#practice"><span>06</span>填空练习</a>
+        <a href="#constants"><span>07</span>常量速查</a>
+      </nav>
+      <div class="sidebar-note"><span class="mono">Linux / x86</span><p>amd64 · i386<br>在浏览器中生成代码</p></div>
+    </aside>
+    <main class="workspace">
+      <div class="page-heading"><p class="eyebrow">LINUX / X86 REFERENCE</p><h1>PWN 脚本工作台</h1><p>从函数和输入条件出发，写好每一段链。</p></div>
 
-  <!-- 简介 -->
-  <div class="card">
-    <h2>这是干什么的</h2>
-    <p style="margin:0;font-size:14px;line-height:1.65">写 PWN 的 exp 时，查系统调用号、记参数顺序、记每个参数走哪个寄存器、拼 shellcraft 调用链、拼 ROP 链，都要翻 man、翻表、翻笔记。这个页面把这些事收到一处：选架构 → 搜调用 → 按提示填参数 → 生成能粘进 exp 的 pwntools 代码骨架，填实参数、回 VM 对真题跑通才算数，seccomp 白名单检查和 ROP 链模板也在同一页。</p>
-  </div>
+  <section class="card exp-workspace" id="exp">
+    <div class="section-head"><h2>EXP 脚本</h2><span class="section-index">01 / BUILD</span></div>
+    <p class="section-description">选择已有的利用条件，填入目标信息，生成一份独立的 pwntools 脚本。</p>
+    <div class="exp-recipes" role="group" aria-label="EXP 模板"><button type="button" class="exp-choice on" data-exp-template="win" aria-pressed="true"><span class="choice-index">01</span><span><b>ret2win</b><small>已有 win / shell 函数</small></span></button>
+<button type="button" class="exp-choice" data-exp-template="plt" aria-pressed="false"><span class="choice-index">02</span><span><b>ret2plt</b><small>程序已导入 system</small></span></button>
+<button type="button" class="exp-choice" data-exp-template="libc-puts" aria-pressed="false"><span class="choice-index">03</span><span><b>ret2libc / puts</b><small>字符串泄漏，两阶段</small></span></button>
+<button type="button" class="exp-choice" data-exp-template="libc-write" aria-pressed="false"><span class="choice-index">04</span><span><b>ret2libc / write</b><small>定长泄漏，两阶段</small></span></button>
+<button type="button" class="exp-choice" data-exp-template="csu" aria-pressed="false"><span class="choice-index">05</span><span><b>ret2csu</b><small>三参数间接调用</small></span></button>
+<button type="button" class="exp-choice" data-exp-template="srop" aria-pressed="false"><span class="choice-index">06</span><span><b>SROP</b><small>amd64 单帧恢复</small></span></button></div>
+    <details class="reference-note source-assistant"><summary>粘贴函数，辅助选型</summary>
+      <label class="flabel" for="expSourceInput">C 函数或反编译伪代码</label>
+      <textarea id="expSourceInput" rows="6" spellcheck="false" placeholder="粘贴 main / vuln / win 等函数。只在本地识别 gets、read、puts、write 等调用线索，不推算 offset。"></textarea>
+      <div class="btn-row"><button class="btn btn-primary" id="expAnalyze">识别函数线索</button><button class="btn btn-ghost" id="expTryExample">用当前样例试一下</button></div>
+      <p class="foot" id="expAnalysis" aria-live="polite"></p>
+    </details>
+    <details class="reference-note source-assistant"><summary>从本地 ELF 导入信息</summary>
+      <p class="foot">在附件目录运行仓库中的 Python 工具，把输出粘贴到这里。只读取 ELF，不启动题目。</p>
+      <pre class="example-code">python3 inspect_elf.py ./pwn &gt; target.json</pre>
+      <label class="flabel" for="expProfileInput">ELF 检查结果 JSON</label><textarea id="expProfileInput" rows="5" spellcheck="false" placeholder="粘贴 target.json 的内容"></textarea>
+      <p class="foot">应用后会重置当前题目的模板参数、偏移、提示符和基址，避免沿用上一题的值。libc 与输入协议仍需另行确认。</p>
+      <button class="btn btn-primary" id="expProfileApply">应用到新题目</button><p class="foot" id="expProfileStatus" aria-live="polite"></p>
+    </details>
+    <p class="exp-condition" id="expCondition"></p>
+    <div class="payload-route" id="expStack" aria-label="载荷组成"></div>
+    <div class="exp-layout">
+      <div class="exp-configuration">
+        <div id="expCommon">
+          <div class="exp-form-grid">
+            <div><label class="flabel" for="expBinary">题目附件路径</label><input type="text" id="expBinary" value="./pwn" spellcheck="false" autocomplete="off"></div>
+            <div><label class="flabel" for="expArch">目标架构</label><select id="expArch"><option value="amd64">amd64 / 64 位</option><option value="i386">i386 / 32 位</option></select></div>
+            <div><label class="flabel" for="expOffset">返回地址偏移</label><input type="text" id="expOffset" placeholder="cyclic + GDB 实测" spellcheck="false" autocomplete="off"></div>
+            <div><label class="flabel" for="expMode">发送与终止条件</label><select id="expMode"><option value="raw">send / 原始字节</option><option value="line">sendline / 按行输入</option><option value="cstring">send / 同时检查 NUL</option></select></div>
+          </div>
+          <div class="exp-field"><label class="flabel" for="expPrompt">输入前的提示符</label><input type="text" id="expPrompt" placeholder="无提示留空；例如 Input:\n" spellcheck="false" autocomplete="off"><p class="field-help">支持反斜杠转义。只有目标确实输出该提示时才填写。</p></div>
+          <details class="reference-note"><summary>PIE、loader 与栈对齐</summary>
+            <div class="exp-field"><label class="flabel" for="expBase">本次 PIE 基址（可选）</label><input type="text" id="expBase" placeholder="未开 PIE 时留空" spellcheck="false"><p class="field-help">需来自同一进程的已验证泄漏；不能复用另一次运行的地址。</p></div>
+            <div class="exp-field"><label class="flabel" for="expLoader">配套 Linux loader（可选）</label><input type="text" id="expLoader" placeholder="例如 ./ld-linux-x86-64.so.2" spellcheck="false"><p class="field-help">仅适用于同时配置 libc 文件的 ret2libc 模板；不填则使用系统默认加载环境。</p></div>
+            <div class="exp-form-grid">
+              <div><label class="flabel" for="expAlign1">阶段 1：额外 ret</label><select id="expAlign1"><option value="0">不添加</option><option value="1">添加一个（amd64）</option></select></div>
+              <div><label class="flabel" for="expAlign2">阶段 2：额外 ret</label><select id="expAlign2"><option value="0">不添加</option><option value="1">添加一个（amd64）</option></select></div>
+            </div><p class="field-help">按目标函数入口的实际栈相位选择，不把补 ret 当作通用修复。SROP 不使用这两个选项。</p>
+          </details>
+        </div>
+        <div class="exp-specific"><h3>模板参数</h3><div id="expFields"></div></div>
+        <details class="reference-note"><summary>看看这类题目的函数</summary><pre class="example-code" id="expExample"></pre><p class="foot" id="expSource"></p><p class="foot">样例用于理解入口条件；数组大小、示例题偏移均不能直接迁移到新目标。</p></details>
+      </div>
+      <div class="exp-result">
+        <div class="output-panel"><div class="code-heading"><h3>exploit.py</h3><span>PYTHON / PWNTOOLS</span></div><pre class="code" id="expCode"></pre>
+          <div class="btn-row"><button class="btn btn-primary" id="expCopy">复制完整脚本</button><button class="btn btn-ghost" id="expDownload">下载 .py</button></div></div>
+        <p class="exp-message" id="expMessage" aria-live="polite"></p>
+        <details class="reference-note"><summary>运行方式</summary><p class="foot">在题目对应的 Linux / pwntools 环境中运行。远程也需要本地 ELF；ret2libc 还需匹配的 libc。</p><pre class="example-code">python3 exploit.py
+python3 exploit.py REMOTE HOST=127.0.0.1 PORT=1337</pre><p class="foot">127.0.0.1:1337 是命令示例，请换成题目地址；本页不发起目标连接。offset、输入协议与漏洞前提仍需自行验证。</p></details>
+      </div>
+    </div>
+  </section>
 
   <!-- 搜索 -->
-  <div class="card">
-    <label class="flabel">架构（调用号和寄存器完全不同，先选对再查）</label>
+  <section class="card lookup-section" id="lookup">
+    <div class="section-head"><h2>系统调用</h2><span class="section-index">02 / LOOKUP</span></div>
+    <label class="flabel">目标架构</label>
     <div class="seg" role="group" aria-label="架构切换">
       <button id="archAmd" class="on">amd64 · syscall</button>
       <button id="archI386">i386 · int 0x80</button>
     </div>
-    <label class="flabel" for="q">① 输入系统调用名或调用号</label>
+    <p class="sub" id="subLine"><code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9</p>
+    <label class="flabel" for="q">调用名或调用号</label>
     <div class="search-wrap">
-      <input type="search" id="q" placeholder="试试 write / 1 / mmap / 9 / openat / 257" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <input type="search" id="q" placeholder="搜索调用名、十进制或十六进制调用号…" autocomplete="off" autocapitalize="off" spellcheck="false">
       <div class="suggest" id="suggest"></div>
     </div>
     <div class="quick" id="quick"></div>
+    <details class="reference-note"><summary>调用表说明与架构差异</summary>
     <div id="i386Note"></div>
     <p class="foot" id="tableNote">已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。</p>
-  </div>
+    </details>
+  </section>
 
   <!-- 参数填写 -->
-  <div class="card" id="detailCard" style="display:none">
+  <section class="card detail-section" id="detailCard" style="display:none">
+    <div class="detail-layout">
+    <div class="parameter-pane">
     <div class="sys-head">
       <span class="name" id="sysName">write</span>
       <span class="nr-badge" id="sysNr">NR 1 · 0x1</span>
@@ -59,23 +137,27 @@
     </div>
     <div id="argsBox"></div>
 
-    <h2 style="margin-top:16px">② 生成的代码 <span>实时更新，寄存器自动加引号，数字原样</span></h2>
+    </div>
+    <div class="output-pane"><div class="output-panel">
+    <div class="code-heading"><h2>生成代码</h2><span>PYTHON</span></div>
     <pre class="code" id="genCode"></pre>
     <p class="warn" id="wlWarn"></p>
     <div class="btn-row">
-      <button class="btn btn-primary" id="copyBtn">复制这行</button>
+      <button class="btn btn-primary" id="copyBtn">复制代码</button>
       <button class="btn btn-ghost" id="addChainBtn">＋ 加到链里</button>
-      <button class="btn btn-ghost" id="asmBtn">看汇编预览 + 顺序说明</button>
+      <button class="btn btn-ghost" id="asmBtn">汇编预览</button>
     </div>
     <pre class="code" id="asmPreview" style="display:none;margin-top:10px"></pre>
     <p class="foot" id="asmNote" style="display:none"></p>
-  </div>
+    </div></div></div>
+  </section>
 
   <!-- seccomp 白名单 -->
-  <div class="card">
-    <h2>③ seccomp 白名单检查 <span>填了才检查；不在名单里的调用会被标红</span></h2>
-    <label class="flabel" for="wlInput">这道题放行的调用（填调用号或名字，逗号/空格隔开，如 1,2,9 或 open,mmap,write）。填完点下面「按白名单直接生成工具链」，就能生成一整段只用名单内调用的 shellcode 骨架，填实参数、回 VM 对真题跑通才算数</label>
-    <input type="text" id="wlInput" placeholder="如 open,mmap,write 或对应调用号 —— 不填 = 不检查" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <section class="card" id="seccomp">
+    <div class="section-head"><h2>seccomp 白名单</h2><span class="section-index">03 / FILTER</span></div>
+    <p class="section-description">填写目标允许的调用。检查结果以手动输入的规则为准。</p>
+    <label class="flabel" for="wlInput">允许的调用（名称或调用号，以逗号或空格分隔）</label>
+    <input type="text" id="wlInput" placeholder="open, read, write" autocomplete="off" autocapitalize="off" spellcheck="false">
     <div class="quick">
       <button data-wl-preset="mmap">open / mmap / write {2,9,1}</button>
       <button data-wl-preset="orw">open / read / write {2,0,1}</button>
@@ -83,10 +165,11 @@
       <button data-wl-preset="">清空（不检查）</button>
     </div>
     <div class="btn-row">
-      <button class="btn btn-primary" id="wlGenBtn">按白名单直接生成工具链</button>
+      <button class="btn btn-primary" id="wlGenBtn">生成允许的调用链</button>
     </div>
     <p class="warn" id="wlGenResult"></p>
     <p class="foot" id="wlStatus">未设置白名单，不做检查。生成对了不等于能跑：seccomp 只放行名单内的调用号，用了名单外的，进程会被 SIGSYS 杀掉或返回 -EPERM。</p>
+    <details class="reference-note"><summary>参数限制（可选）</summary>
     <div class="param-grid">
       <div><label class="flabel" for="wlWriteFd">参数限制 · write 只允许写到哪个 fd（选填，如 1）</label><input type="text" id="wlWriteFd" placeholder="不填 = 不限，如 1" autocomplete="off"></div>
       <div><label class="flabel" for="wlOpenName">参数限制 · open / openat 只允许打开文件名包含（选填，如 flag）</label><input type="text" id="wlOpenName" placeholder="不填 = 不限，如 flag" autocomplete="off"></div>
@@ -94,11 +177,13 @@
       <div><label class="flabel" for="wlExecBan">参数限制 · 禁止 execve 路径包含（选填，如 /bin/sh）</label><input type="text" id="wlExecBan" placeholder="不填 = 不限" autocomplete="off"></div>
     </div>
     <p class="foot" id="paramStatus">未设置参数限制。有些题用 seccomp 做参数过滤（如只放行 write fd=1、open 只能开 flag）：调用号在白名单里、参数超了照样会被拦。填了上面任一项，生成区和链里都会标黄提醒。</p>
-  </div>
+    </details>
+  </section>
 
   <!-- 链 -->
-  <div class="card">
-    <h2>④ 拼链 <span>多步拼成一段，每步标出 rax 变成了什么；白名单违规标红、参数超限标黄、返回值只在 rax 里会被下一步覆盖时提醒先保存</span></h2>
+  <section class="card" id="chain">
+    <div class="section-head"><h2>调用链</h2><span class="section-index">04 / CHAIN</span></div>
+    <p class="section-description">按顺序组合调用，留意返回值与寄存器的变化。</p>
     <div class="btn-row" style="margin:0 0 4px">
       <button class="btn btn-ghost" id="presetMmap">一键示例：open → mmap → write</button>
       <button class="btn btn-ghost" id="presetOrw">一键示例：open → read → write</button>
@@ -109,12 +194,13 @@
       <pre class="code" id="chainCode" style="margin-top:10px"></pre>
       <div class="btn-row"><button class="btn btn-primary" id="copyChainBtn">复制整段 shellcode</button></div>
     </div>
-  </div>
+  </section>
 
   <!-- ROP 链 -->
-  <div class="card">
-    <h2>⑤ ROP 链模式（syscall） <span>选模板、填 offset 和 gadget 地址，自动拼出 flat() 链；地址要自己用 ROPgadget / ropper 量，生成的是骨架，STATIC_ONLY，回 VM 对真题跑通才算数</span></h2>
-    <label class="flabel">模板（4.1 / 4.2 是 i386 int 0x80，4.3 是 amd64 syscall；4.1a / 4.2a 是 4.1 / 4.2 的 amd64 版）</label>
+  <section class="card" id="rop">
+    <div class="section-head"><h2>ROP 模板</h2><span class="section-index">05 / ROP</span></div>
+    <p class="section-description">选择链的结构，再填入目标程序的地址与偏移。</p>
+    <label class="flabel">链的结构</label>
     <div class="seg" role="group" aria-label="ROP 模板切换">
       <button id="ropT41" class="on">4.1 i386 read→BSS→execve</button>
       <button id="ropT42">4.2 i386 写 /bin/sh→execve</button>
@@ -122,7 +208,7 @@
       <button id="ropT41a">4.1a amd64 read→BSS→execve</button>
       <button id="ropT42a">4.2a amd64 写串→execve</button>
     </div>
-    <label class="flabel">输入原语（先确认再生成：链含 \x00、两次发送有时序要求，都取决于它）</label>
+    <label class="flabel">目标的输入方式</label>
     <div class="seg" role="group" aria-label="ROP 输入原语">
       <button id="ropPrimGets">gets（换行结束）</button>
       <button id="ropPrimStrcpy">strcpy（NUL 结束）</button>
@@ -132,6 +218,7 @@
     </div>
     <p class="foot" id="ropPrimNote" style="margin:0 0 4px">没确认输入原语：不知道是 gets 还是 read、定长还是不定长，生成的链可能含 \x00、两次发送可能有时序问题，先确认再跑。</p>
     <p class="foot" id="ropCond" style="margin:0 0 4px"></p>
+    <details class="reference-note preset-note"><summary>填入示例参数</summary>
     <div class="btn-row" style="margin:0 0 6px">
       <button class="btn btn-ghost" id="ropPreset41">填入 4.1 示例（cmcc_simplerop）</button>
       <button class="btn btn-ghost" id="ropPreset42">填入 4.2 示例（get_started_3dsctf_2016）</button>
@@ -139,86 +226,79 @@
       <button class="btn btn-ghost" id="ropPreset41a">4.1a 清成 0 骨架</button>
       <button class="btn btn-ghost" id="ropPreset42a">4.2a 清成 0 骨架</button>
     </div>
+    </details>
     <div class="rop-grid">
-      <div><label class="flabel" for="ropOffset">offset_to_ret（输入起点 → saved RIP 的填充数，i386 模板里是 saved EIP，cyclic 量）</label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="ropDelay">第二阶段可选延时（秒，4.1 / 4.1a；默认 0.3，不能代替协议同步）</label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42Str">要写入的字符串（4.2 / 4.2a 用；自动按 4 字节 / 8 字节分块，任意长度都行）</label><input type="text" class="rop-input" id="rop42Str" value="/bin/sh" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="ropOffset">offset_to_ret<span class="field-help">输入起点 → saved RIP 的填充数，i386 模板里是 saved EIP，cyclic 量</span></label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="ropDelay">第二阶段可选延时<span class="field-help">秒，4.1 / 4.1a；默认 0.3，不能代替协议同步</span></label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Str">要写入的字符串<span class="field-help">4.2 / 4.2a 用；自动按 4 字节 / 8 字节分块，任意长度都行</span></label><input type="text" class="rop-input" id="rop42Str" value="/bin/sh" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG41">
       <p class="foot" style="grid-column:1/-1;margin:0">以下 4 个 gadget / BSS 地址是 cmcc_simplerop 的示例值、未验证，按当前目标重测后填。</p>
-      <div><label class="flabel" for="rop41PopEax">pop_eax_addr（pop eax; ret）</label><input type="text" class="rop-input" id="rop41PopEax" value="0x80bae06" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41Pop3">pop3_addr（pop edx; pop ecx; pop ebx; ret）</label><input type="text" class="rop-input" id="rop41Pop3" value="0x806e850" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41Int80">int80_addr（int 0x80; ret）</label><input type="text" class="rop-input" id="rop41Int80" value="0x806eef0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41Bss">bss_addr（可写 BSS，read 和 /bin/sh 放这里）</label><input type="text" class="rop-input" id="rop41Bss" value="0x80eaf80" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41Len">read 长度（read(0, bss, len) 的 count）</label><input type="text" class="rop-input" id="rop41Len" value="0x100" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41PopEax">pop_eax_addr<span class="field-help">pop eax; ret</span></label><input type="text" class="rop-input" id="rop41PopEax" value="0x80bae06" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41Pop3">pop3_addr<span class="field-help">pop edx; pop ecx; pop ebx; ret</span></label><input type="text" class="rop-input" id="rop41Pop3" value="0x806e850" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41Int80">int80_addr<span class="field-help">int 0x80; ret</span></label><input type="text" class="rop-input" id="rop41Int80" value="0x806eef0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41Bss">bss_addr<span class="field-help">可写 BSS，read 和 /bin/sh 放这里</span></label><input type="text" class="rop-input" id="rop41Bss" value="0x80eaf80" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41Len">read 长度<span class="field-help">read(0, bss, len) 的 count</span></label><input type="text" class="rop-input" id="rop41Len" value="0x100" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG42" style="display:none">
       <p class="foot" style="grid-column:1/-1;margin:0">以下 5 个 gadget 地址由用户提供、未验证，按当前目标重测后填。</p>
-      <div><label class="flabel" for="rop42Binsh">binsh_addr（写入 /bin/sh 的可写 BSS 地址）</label><input type="text" class="rop-input" id="rop42Binsh" value="0x080eb050" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42PopEax">pop_eax_addr（pop eax; ret）</label><input type="text" class="rop-input" id="rop42PopEax" value="0x080b91e6" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42Pop3">pop3_addr（pop edx; pop ecx; pop ebx; ret）</label><input type="text" class="rop-input" id="rop42Pop3" value="0x0806fc30" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42Mov">mov_edx_eax（mov dword ptr [edx], eax; ret）</label><input type="text" class="rop-input" id="rop42Mov" value="0x080557ab" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42Int80">int80_addr（int 0x80; ret）</label><input type="text" class="rop-input" id="rop42Int80" value="0x0806d7e5" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Binsh">binsh_addr<span class="field-help">写入 /bin/sh 的可写 BSS 地址</span></label><input type="text" class="rop-input" id="rop42Binsh" value="0x080eb050" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42PopEax">pop_eax_addr<span class="field-help">pop eax; ret</span></label><input type="text" class="rop-input" id="rop42PopEax" value="0x080b91e6" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Pop3">pop3_addr<span class="field-help">pop edx; pop ecx; pop ebx; ret</span></label><input type="text" class="rop-input" id="rop42Pop3" value="0x0806fc30" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Mov">mov_edx_eax<span class="field-help">mov dword ptr [edx], eax; ret</span></label><input type="text" class="rop-input" id="rop42Mov" value="0x080557ab" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42Int80">int80_addr<span class="field-help">int 0x80; ret</span></label><input type="text" class="rop-input" id="rop42Int80" value="0x0806d7e5" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG43" style="display:none">
-      <div><label class="flabel" for="rop43PopRax">pop_rax_addr（pop rax; ret）</label><input type="text" class="rop-input" id="rop43PopRax" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop43PopRdi">pop_rdi_addr（pop rdi; ret）</label><input type="text" class="rop-input" id="rop43PopRdi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop43PopRsi">pop_rsi_addr（pop rsi; ret）</label><input type="text" class="rop-input" id="rop43PopRsi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop43PopRdx">pop_rdx_addr（pop rdx; ret）</label><input type="text" class="rop-input" id="rop43PopRdx" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop43Syscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop43Syscall" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop43Binsh">binsh_addr（目标里已有的 /bin/sh 地址）</label><input type="text" class="rop-input" id="rop43Binsh" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43PopRax">pop_rax_addr<span class="field-help">pop rax; ret</span></label><input type="text" class="rop-input" id="rop43PopRax" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43PopRdi">pop_rdi_addr<span class="field-help">pop rdi; ret</span></label><input type="text" class="rop-input" id="rop43PopRdi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43PopRsi">pop_rsi_addr<span class="field-help">pop rsi; ret</span></label><input type="text" class="rop-input" id="rop43PopRsi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43PopRdx">pop_rdx_addr<span class="field-help">pop rdx; ret</span></label><input type="text" class="rop-input" id="rop43PopRdx" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43Syscall">syscall_addr<span class="field-help">syscall; ret</span></label><input type="text" class="rop-input" id="rop43Syscall" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop43Binsh">binsh_addr<span class="field-help">目标里已有的 /bin/sh 地址</span></label><input type="text" class="rop-input" id="rop43Binsh" value="0" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG41a" style="display:none">
-      <div><label class="flabel" for="rop41aPopRax">pop_rax_addr（pop rax; ret）</label><input type="text" class="rop-input" id="rop41aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aPopRdi">pop_rdi_addr（pop rdi; ret）</label><input type="text" class="rop-input" id="rop41aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aPopRsi">pop_rsi_addr（pop rsi; ret）</label><input type="text" class="rop-input" id="rop41aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aPopRdx">pop_rdx_addr（pop rdx; ret）</label><input type="text" class="rop-input" id="rop41aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aSyscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop41aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aBss">bss_addr（可写 BSS，read 和 /bin/sh 放这里）</label><input type="text" class="rop-input" id="rop41aBss" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop41aLen">read 长度（read(0, bss, len) 的 count）</label><input type="text" class="rop-input" id="rop41aLen" value="0x100" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRax">pop_rax_addr<span class="field-help">pop rax; ret</span></label><input type="text" class="rop-input" id="rop41aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRdi">pop_rdi_addr<span class="field-help">pop rdi; ret</span></label><input type="text" class="rop-input" id="rop41aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRsi">pop_rsi_addr<span class="field-help">pop rsi; ret</span></label><input type="text" class="rop-input" id="rop41aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aPopRdx">pop_rdx_addr<span class="field-help">pop rdx; ret</span></label><input type="text" class="rop-input" id="rop41aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aSyscall">syscall_addr<span class="field-help">syscall; ret</span></label><input type="text" class="rop-input" id="rop41aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aBss">bss_addr<span class="field-help">可写 BSS，read 和 /bin/sh 放这里</span></label><input type="text" class="rop-input" id="rop41aBss" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop41aLen">read 长度<span class="field-help">read(0, bss, len) 的 count</span></label><input type="text" class="rop-input" id="rop41aLen" value="0x100" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG42a" style="display:none">
-      <div><label class="flabel" for="rop42aBinsh">binsh_addr（写入字符串的可写 BSS 地址）</label><input type="text" class="rop-input" id="rop42aBinsh" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aPopRax">pop_rax_addr（pop rax; ret）</label><input type="text" class="rop-input" id="rop42aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aPopRdi">pop_rdi_addr（pop rdi; ret）</label><input type="text" class="rop-input" id="rop42aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aMov">mov_rdi_rax（mov qword ptr [rdi], rax; ret）</label><input type="text" class="rop-input" id="rop42aMov" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aPopRsi">pop_rsi_addr（pop rsi; ret）</label><input type="text" class="rop-input" id="rop42aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aPopRdx">pop_rdx_addr（pop rdx; ret）</label><input type="text" class="rop-input" id="rop42aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="rop42aSyscall">syscall_addr（syscall; ret）</label><input type="text" class="rop-input" id="rop42aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aBinsh">binsh_addr<span class="field-help">写入字符串的可写 BSS 地址</span></label><input type="text" class="rop-input" id="rop42aBinsh" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRax">pop_rax_addr<span class="field-help">pop rax; ret</span></label><input type="text" class="rop-input" id="rop42aPopRax" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRdi">pop_rdi_addr<span class="field-help">pop rdi; ret</span></label><input type="text" class="rop-input" id="rop42aPopRdi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aMov">mov_rdi_rax<span class="field-help">mov qword ptr [rdi], rax; ret</span></label><input type="text" class="rop-input" id="rop42aMov" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRsi">pop_rsi_addr<span class="field-help">pop rsi; ret</span></label><input type="text" class="rop-input" id="rop42aPopRsi" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aPopRdx">pop_rdx_addr<span class="field-help">pop rdx; ret</span></label><input type="text" class="rop-input" id="rop42aPopRdx" value="0" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="rop42aSyscall">syscall_addr<span class="field-help">syscall; ret</span></label><input type="text" class="rop-input" id="rop42aSyscall" value="0" autocomplete="off" spellcheck="false"></div>
     </div>
-    <div id="ropSteps"></div>
-    <h2 style="margin-top:16px">生成的 ROP 链 <span>实时更新；pop3 的顺序是 edx→ecx→ebx，生成器已按寄存器对应排好，别再手动换算</span></h2>
+    <details class="reference-note"><summary>查看链的执行步骤</summary><div id="ropSteps"></div></details>
+    <div class="code-heading rop-code-heading"><h3>生成的 ROP 链</h3><span>PYTHON / PWNTOOLS</span></div>
     <pre class="code" id="ropCode"></pre>
     <p class="warn" id="ropWarn"></p>
     <div class="btn-row"><button class="btn btn-primary" id="ropCopyBtn">复制 ROP 链代码</button></div>
+    <details class="reference-note"><summary>地址查找与单 pop 替代</summary>
     <p class="foot">地址从哪来：gadget 用 <code>ROPgadget --binary ./prog | grep "pop eax"</code> 或 ropper 找；offset 用 cyclic 试出来；BSS 看 <code>readelf -S ./prog</code> 的 .bss（要可写、够放 8 字节）。</p>
     <p class="foot">没有 pop3 只有单个 pop 的回退：别硬套模板，拆成单个 pop 逐个设寄存器。i386 read(0, bss, len)：pop eax;ret→3、pop ebx;ret→0、pop ecx;ret→bss、pop edx;ret→len，再 int 0x80；execve(bss, 0, 0)：pop eax;ret→11、pop ebx;ret→bss、pop ecx;ret→0、pop edx;ret→0，再 int 0x80。amd64 read(0, bss, len)：pop rax;ret→0、pop rdi;ret→0、pop rsi;ret→bss、pop rdx;ret→len，再 syscall；execve(bss, 0, 0)：pop rax;ret→59、pop rdi;ret→bss、pop rsi;ret→0、pop rdx;ret→0，再 syscall。单个 pop gadget 用 ROPgadget 按寄存器名分别找：<code>ROPgadget --binary ./prog | grep "pop rax"</code>、<code>ROPgadget --binary ./prog | grep "pop rdi"</code>、<code>ROPgadget --binary ./prog | grep "pop rsi"</code>、<code>ROPgadget --binary ./prog | grep "pop rdx"</code>。</p>
-    <p class="foot" style="margin-top:10px"><b>ROP 区核对清单（12 项，STATIC_ONLY，未经 VM 真题验证）：</b></p>
-    <ol class="foot" style="padding-left:20px;margin-top:2px">
-      <li>\x00 警告已修：生成时实算链字节数与 \x00 数并写入注释与警告区，默认预设实测 4.1 共 88 字节含 21 个 \x00、4.2 共 140 字节含 28 个 \x00（按 4.2 预设 offset=56 计；页面默认 offset 0x20 时为 116 字节、28 个 \x00），strcpy 会在 NUL 处终止；gets 按换行结束；read 可读 NUL，后续字符串处理另查。</li>
-      <li>两阶段发送：gets 输入使用 sendline 并检查换行字节；默认 0.3s 仅是可选延时，read 短读、循环定长读与 stdio 预读仍需按实际协议验证。</li>
-      <li>4.2 通用 4 字节分块已修：要写入的字符串默认 /bin/sh，自动补结尾 NUL、按 4 字节分块，任意长度都生成对应写块，默认输出与旧的两行写块内容相同（分块前硬编码版）。</li>
-      <li>amd64 4.1a / 4.2a 已修：新增两个模板，地址类输入全 0 占位 + SKELETON（read 长度默认 0x100 是长度不是地址），无编造地址；4.1a 是 read→BSS→execve，4.2a 是 8 字节分块写串→execve。</li>
-      <li>单 pop 回退已补全：i386 与 amd64 逐寄存器序列均已写全（见回退段，本节“没有 pop3 只有单个 pop 的回退”段），不再只有一句概括。</li>
-      <li>输入原语提问已修：模板区上方五选一（gets / strcpy / read 单次（可能短读） / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
-      <li>4.2 示例地址已标注：5 个 gadget 地址（binsh 0x080eb050、pop_eax 0x080b91e6、pop3 0x0806fc30、mov 0x080557ab、int80 0x0806d7e5）由用户提供、未验证，条件行、生成代码注释、预设 toast 三处均已标注，地址值本身未动。</li>
-      <li>4.3 全 0 占位无问题：6 个输入默认全 0，生成代码含 SKELETON 占位说明，本轮未动 4.3 一字节。</li>
-      <li>已核对 ROP 逻辑无问题：pop3 弹出顺序是 edx→ecx→ebx，4.2 第二写块地址是 binsh+4，execve 均为 (path, 0, 0)，均未动。</li>
-      <li>clone 顺序无问题：i386 是 tls 第 4、child_tidptr 第 5，amd64 反着，ROP 区改动不含 clone。</li>
-      <li>白名单按名查号无问题：seccomp 白名单（第③节）本轮未动，ROP 区不含白名单改动。</li>
-      <li>其余项待补充：评审清单原文未找到（artifact 内只有构建审计、goal 目录与 live 页均无该清单），除上述 11 项外无可核实内容，待提供原文后再补——本项不编造。</li>
-    </ol>
-  </div>
+    </details>
+    <details class="reference-note"><summary>运行前核对</summary>
+      <ul class="check-list"><li>offset 用 cyclic 实测；gadget 地址与可写内存以当前 ELF 为准。</li><li>核对 gadget 弹栈顺序、字符串结尾 NUL 和目标输入的终止条件。</li><li>两阶段发送按目标协议同步，sleep 不能保证读入边界。</li><li>模板与示例地址未经实际题目运行验证，请在目标环境中调试。</li></ul>
+    </details>
+  </section>
 
   <!-- 练习 -->
-  <div class="card">
-    <h2>⑥ 填空练习（amd64） <span>不看生成器，自己填，填完点检查；错的格子会给提示</span></h2>
+  <section class="card" id="practice">
+    <div class="section-head"><h2>填空练习</h2><span class="section-index">06 / PRACTICE</span></div>
+    <p class="section-description">仅限 amd64。先自己填写，再对照答案。</p>
     <div id="quizBox"></div>
-  </div>
+  </section>
 
   <!-- 常量速查 -->
-  <div class="card">
-    <h2>⑦ 常量速查 <span>点左边的值，直接填进刚才点过的参数框</span></h2>
+  <section class="card" id="constants">
+    <div class="section-head"><h2>常量速查</h2><span class="section-index">07 / REFERENCE</span></div>
+    <p class="section-description">先选中参数输入框，再点击需要的常量。</p>
     <div class="const-grid">
       <div class="const-box"><h3>文件描述符 fd（固定约定）</h3><table>
         <tr><td data-fill="0">0</td><td>stdin 标准输入</td></tr>
@@ -269,9 +349,11 @@
         <p class="mono" style="font-size:12.5px;word-break:break-all">pwn constgrep -c <span class="cgArch">amd64</span> PROT_READ<br>pwn constgrep -c <span class="cgArch">amd64</span> SYS_mmap<br>man 2 mmap &nbsp;# 看每个参数含义</p>
       </div>
     </div>
-  </div>
+  </section>
 
-  <p class="foot">填法口诀：调用名看 NAME，顺序看 ARG0→ARG5，值按参数类型分四类——①字符串指针（文件名/路径）：先 <code>pushstr</code> 再传 <code>'rsp'</code>，本页已自动带上；②长度/数量（count/len）：才是自己按数据大小定，给 0x100/0x1000；③权限/标志位（mode/prot/flags）：mode 用八进制 0o777/0o755/0o644，prot/flags 用下方速查的常量值相加；④fd/地址/偏移：fd 是 0/1/2 或上一步 open 返回的 rax，地址是 mmap 返回的 rax 或 'rsp'，偏移一般填 0。</p>
+    </main>
+  </div>
+  <footer class="site-footer"><span>PwnWorkbench <span class="footer-divider">/</span> Linux x86</span><a href="https://github.com/wzeze-lll/CTF-Writeups" target="_blank" rel="noopener noreferrer">CTF 题解 ↗</a></footer>
 </div>
 <div class="toast" id="toast">已复制</div>
 

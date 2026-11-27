@@ -13,6 +13,7 @@ interface ChainStep {
 interface MultiString { idx: number[]; def: string[]; }
 // Keep these ID-to-element types aligned with index.html.
 interface UiElements {
+  "themeToggle": HTMLButtonElement;
   "subLine": HTMLElement;
   "archAmd": HTMLButtonElement;
   "archI386": HTMLButtonElement;
@@ -1107,6 +1108,7 @@ function buildFullCode(sys: Syscall, vals: string[]){
 function currentVals(): string[] { return Array.from(document.querySelectorAll<HTMLInputElement>(".arg-input"), i => i.value); }
 
 function select(sys: Syscall){
+  const hadSelection = cur !== null;
   cur=sys; q.value=sys.name; suggest.classList.remove("open");
   $("detailCard").style.display="block";
   $("sysName").textContent=sys.name;
@@ -1185,7 +1187,7 @@ function select(sys: Syscall){
       autoSrc='<div class="len-src"><p class="ls-title">这个数是「有几个」，不是字节数！点一个直接填</p>'
         +'<div class="ls-row"><button data-autofill="1">1 · 只有 1 个（最常见）</button><button data-autofill="2">2 · 两个</button><button data-autofill="3">3 · 三个</button><span>指向的数组/表格里有几个元素就填几（如 iovec 表格搭了几行、poll 的 ufds 数组里有几个 pollfd、sembuf 数组里有几个操作），必须一一对应；和数据有多少字节没关系</span></div></div>';
     }
-    return '<div class="arg-row"><div class="arg-top"><span class="reg-badge">ARG'+i+" · "+REGS[i]+'</span><span class="aname">'+an+'</span><span class="atype">'+at+'</span><span class="src-badge '+h[0]+'">'+SRC_LABEL[h[0]]+'</span></div><p class="arg-hint">'+archText(h[1])+'</p><input type="text" class="arg-input" data-i="'+i+'" placeholder="填数字 0x100 / 寄存器 '+axReg()+'（自动加引号）" autocomplete="off" autocapitalize="off" spellcheck="false">'+(chips?'<div class="arg-chips">'+chips+"</div>":"")+lenSrc+autoSrc+"</div>";
+    return '<div class="arg-row"><div class="arg-top"><span class="reg-badge">ARG'+i+" · "+REGS[i]+'</span><span class="aname">'+an+'</span><span class="atype">'+at+'</span><span class="src-badge '+h[0]+'">'+SRC_LABEL[h[0]]+'</span></div><label class="sr-only" for="arg-'+i+'">ARG'+i+' '+an+'</label><input type="text" id="arg-'+i+'" class="arg-input" data-i="'+i+'" placeholder="数值或寄存器，如 0x100 / '+axReg()+'" autocomplete="off" autocapitalize="off" spellcheck="false">'+(chips?'<div class="arg-chips">'+chips+"</div>":"")+'<details class="arg-help"><summary>参数说明与填值参考</summary><p class="arg-hint">'+archText(h[1])+'</p>'+lenSrc+autoSrc+'</details></div>';
   }).join("");
   // 默认示例值
   var DEF: Record<string, string[]> = {write:["1","'rax'","0x100"],read:["0","'rsp'","0x100"],mmap:["0","0x1000","1","2","'rax'","0"],mmap2:["0","0x1000","1","2","'rax'","0"],mprotect:["'rax'","0x1000","7"],sendfile:["1","'rax'","0","0x100"],close:["'rax'"],exit:["0"],open:["'rsp'","0","0"],openat:["-100","'rsp'","0","0"],execve:["'rsp'","0","0"],chmod:["'rsp'","0o777"],fchmod:["'rax'","0o777"],chown:["'rsp'","0","0"],mkdir:["'rsp'","0o755"],creat:["'rsp'","0o644"],rename:["'rsp'","'r13'"],link:["'rsp'","'r13'"],symlink:["'rsp'","'r13'"],unlink:["'rsp'"],rmdir:["'rsp'"],chdir:["'rsp'"],access:["'rsp'","0"],stat:["'rsp'","'r13'"],lstat:["'rsp'","'r13'"],readlink:["'rsp'","'r13'","0x100"],truncate:["'rsp'","0"],lseek:["'rax'","0","0"],dup2:["'rax'","1"],readv:["0","'rsp'","1"],writev:["1","'rsp'","1"],preadv:["'rax'","'rsp'","1","0","0"],pwritev:["1","'rsp'","1","0","0"]};
@@ -1243,7 +1245,7 @@ function select(sys: Syscall){
     });
   });
   render();
-  $("detailCard").scrollIntoView({behavior:"smooth",block:"nearest"});
+  if (hadSelection) $("detailCard").scrollIntoView({behavior:"smooth",block:"start"});
 }
 // ===== seccomp 白名单 =====
 var wlSet: Record<number, number> | null = null;
@@ -2004,7 +2006,6 @@ function ropGen(){
   var w=$("ropWarn"), msgs: string[]=[];
   if(empty.length) msgs.push("还没填："+empty.join("、")+"——生成的链里对应位置是空的，先用 ROPgadget 量出来再填。");
   if(zeros.length) msgs.push("还是 0 占位："+zeros.join("、")+"——0 地址一跳就崩，按当前目标重测后填真实地址。");
-  msgs.push(ropWarnFor(L && L.zeros!==null ? L.zeros : "待填入真实地址后计算", L && L.total!==null ? L.total : "待计算", ropPrim));
   if(msgs.length){ w.innerHTML=msgs.join("<br>"); w.classList.add("show"); } else { w.innerHTML=""; w.classList.remove("show"); }
   var pn=$("ropPrimNote");
   if(pn) pn.textContent=ropWarnFor(L && L.zeros!==null ? L.zeros : "待计算", L && L.total!==null ? L.total : "待计算", ropPrim);
@@ -2065,11 +2066,11 @@ function setArch(a: Architecture){
   $("archI386").classList.toggle("on", a==="i386");
   document.querySelectorAll<HTMLElement>(".cgArch").forEach(function(el){el.textContent=a;});
   if(a==="i386"){
-    $("subLine").innerHTML="i386 系统调用表 → <code>shellcraft.i386.linux.syscall(...)</code>，走 <code>int 0x80</code>。顺序：<code>eax=NR, ebx, ecx, edx, esi, edi, ebp</code>，调用号和 amd64 完全不同（如 read=3, write=4, open=5, execve=11）。i386 有老式 <code>mmap</code>(90，参数是结构体指针)；六参数写法使用 <code>mmap2</code>(192，pgoff 以 4096 字节为单位)；老内核 socket 类调用走 socketcall(102) 多路复用。";
+    $("subLine").innerHTML="<code>eax = NR</code> · ebx / ecx / edx / esi / edi / ebp";
     $("tableNote").textContent="i386 表共 "+SYS32.length+" 条：NR 0\u2013386 段收录现代常用号，31 个历史号未收录（19 个无实现、12 个旧 ABI：oldstat/oldfstat/signal/sgetmask/ssetmask/uselib 等）（含 socketcall=102、ipc=117、select=142、poll=168、mmap2=192、truncate64/sendfile64、set_thread_area=243、359\u2013373 的 socket 独立调用、393\u2013402 的 SysV IPC 独立调用、403–423 的 time64 系列（32 位专用，如 clock_gettime64/futex_time64，415 除外），222、223、251、285、387–392、415 是未分配空号（共 11 个）；149 _sysctl、253 lookup_dcookie 有名无实现、调用只会返回 -ENOSYS，也未收录），NR 424 起为与 x64 共用的新调用、参数签名按同名 x64 调用复用，这一段使用前建议再用 man 确认。找不到就换英文名再试；切回 amd64 看完整表。";
     var n32=$("i386Note"); if(n32){ n32.innerHTML="<b>i386 已核对的易错点：</b>① socketcall(102) 是多路复用入口，子调用号 SYS_SOCKET=1 / BIND=2 / CONNECT=3 / LISTEN=4 / ACCEPT=5，第二个参数是指向参数数组的指针；新内核（4.3+）另有独立的 socket(359)/bind(361)/connect(362) 等号，可直接搜名字。② mmap2(192) 的最后一个参数 pgoff 单位是<b>页</b>（0x1000 字节），不是字节。③ ipc(117) 是 SysV IPC 多路复用入口（semget/msgget/shmget 走它），新内核也有独立号 393\u2013402。④ clone 的参数顺序和 amd64 不同：i386 是 flags / newsp / parent_tidptr / <b>tls / child_tidptr</b>（tls 第 4、child_tidptr 第 5，后两个和 amd64 反着——amd64 是 child_tidptr 第 4、tls 第 5），本页已按 i386 顺序收录。⑤ 同名 uid/gid 调用按名查找返回的是 *32 版号：getuid=199、getgid=200、geteuid=201、getegid=202、setuid=213、setgid=214（旧 16 位版号已从表里去掉，免得搜 getuid 跳出 24）。其余 i386 专属号（0\u2013386）已按 i386 表逐条核对，424 起共用号见上方说明。⑥ 403–423 是 32 位专用的 time64 系列（415 除外）（解决 2038 年问题的 64 位时间版）：参数顺序和同名普通版一样，只是时间结构体是 64 位的，搜 clock_gettime64 / futex_time64 / utimensat_time64 能直接找到；222、223、251、285、387–392、415 是未分配空号（共 11 个），没有对应调用。"; n32.classList.add("show"); }
   }else{
-    $("subLine").innerHTML="x64 系统调用表 → <code>shellcraft.amd64.linux.syscall(...)</code>。顺序固定：<code>rax=NR, rdi, rsi, rdx, r10, r8, r9</code>（第 4 个参数是 r10，不是 rcx）。";
+    $("subLine").innerHTML="<code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9";
     $("tableNote").textContent="已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。";
     var n64=$("i386Note"); if(n64){ n64.classList.remove("show"); n64.innerHTML=""; }
   }
@@ -2083,6 +2084,34 @@ function setArch(a: Architecture){
 }
 $("archAmd").addEventListener("click",function(){setArch("amd64");});
 $("archI386").addEventListener("click",function(){setArch("i386");});
+
+
+// A local display preference; generation does not depend on storage availability.
+(function initTheme(){
+  if (typeof window === "undefined" || !document.documentElement) return;
+  const root = document.documentElement;
+  const button = $("themeToggle");
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  let chosen: string | null = null;
+  try { chosen = window.localStorage.getItem("syscall-theme"); } catch {}
+  const apply = (dark: boolean) => {
+    root.dataset.theme = dark ? "dark" : "light";
+    button.textContent = dark ? "浅色" : "深色";
+    button.setAttribute("aria-label", dark ? "切换到浅色模式" : "切换到深色模式");
+    button.setAttribute("aria-pressed", String(dark));
+  };
+  apply(chosen === "dark" || (chosen !== "light" && media.matches));
+  media.addEventListener("change", event => {
+    if (chosen !== "dark" && chosen !== "light") apply(event.matches);
+  });
+  button.addEventListener("click", () => {
+    chosen = root.dataset.theme === "dark" ? "light" : "dark";
+    apply(chosen === "dark");
+    try { window.localStorage.setItem("syscall-theme", chosen); } catch {}
+  });
+})();
+
+initExpWorkbench();
 
 // 默认选中 write
 selectByName("write");
