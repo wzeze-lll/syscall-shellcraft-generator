@@ -1204,6 +1204,7 @@ HINTS["alarm:seconds"] = ["fix", "多少秒后发 SIGALRM 的秒数，不是字�
 HINTS["listen:backlog"] = ["fix", "等待队列的个数，不是字节长度：还没被 accept 的连接最多排队几个，常用 5 或 128；填大了内核也会按上限截断", ["5", "128"]];
 var cur = null;
 var chain = [];
+var pendingArch = null;
 var lastFocus = null;
 var lastLenValue = "0x100";
 function isLenName(n, sysName) { n = (n || "").toLowerCase(); if (/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n))
@@ -2708,8 +2709,16 @@ ropGen();
 function setArch(a) {
     if (arch === a)
         return;
-    if (chain.length > 0 && !confirm("切换架构会清空当前调用链（链只属于一个架构）。要继续吗？"))
+    if (chain.length > 0) {
+        pendingArch = a;
+        $("archConfirm").hidden = false;
         return;
+    }
+    doSetArch(a);
+}
+function doSetArch(a) {
+    pendingArch = null;
+    $("archConfirm").hidden = true;
     arch = a;
     $("strLabel").textContent = archText("文件名字符串（生成时自动 pushstr 压栈，文件名参数传 'rsp'）");
     $("strLabel2").textContent = archText("第二个文件名字符串（新名字：先 pushstr 再 mov r13, rsp 保存，第二个文件名参数传 'r13'）");
@@ -2748,6 +2757,9 @@ function setArch(a) {
 }
 $("archAmd").addEventListener("click", function () { setArch("amd64"); });
 $("archI386").addEventListener("click", function () { setArch("i386"); });
+$("archConfirmYes").addEventListener("click", function () { if (pendingArch)
+    doSetArch(pendingArch); });
+$("archConfirmNo").addEventListener("click", function () { pendingArch = null; $("archConfirm").hidden = true; });
 // A local display preference; generation does not depend on storage availability.
 (function initTheme() {
     if (typeof window === "undefined" || !document.documentElement)

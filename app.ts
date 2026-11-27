@@ -17,6 +17,9 @@ interface UiElements {
   "subLine": HTMLElement;
   "archAmd": HTMLButtonElement;
   "archI386": HTMLButtonElement;
+  "archConfirm": HTMLElement;
+  "archConfirmYes": HTMLButtonElement;
+  "archConfirmNo": HTMLButtonElement;
   "q": HTMLInputElement;
   "suggest": HTMLElement;
   "quick": HTMLElement;
@@ -908,6 +911,7 @@ HINTS["listen:backlog"]=["fix","等待队列的个数，不是字节长度：还
 
 var cur: Syscall | null = null;
 var chain: ChainStep[] = [];
+var pendingArch: Architecture | null = null;
 var lastFocus: HTMLInputElement | null = null;
 var lastLenValue="0x100";
 function isLenName(n: string, sysName: string){ n=(n||"").toLowerCase(); if(/vlen|nr_segs|liovcnt|riovcnt|sigsetsize|sizemask|gidsetsize|initval|nfds|nsops|nsems|nr_|maxevents/.test(n)) return false; if((sysName==="eventfd"||sysName==="eventfd2") && n==="count") return false; if((sysName==="clone3"||sysName==="openat2"||sysName==="epoll_create"||sysName==="bpf") && n==="size") return false; return /count|len|size|bufsiz|nbytes|msgsz/.test(n); }
@@ -2057,7 +2061,16 @@ ropGen();
 // ===== 架构切换 =====
 function setArch(a: Architecture){
   if(arch===a) return;
-  if(chain.length>0 && !confirm("切换架构会清空当前调用链（链只属于一个架构）。要继续吗？")) return;
+  if(chain.length>0){
+    pendingArch=a;
+    $("archConfirm").hidden=false;
+    return;
+  }
+  doSetArch(a);
+}
+function doSetArch(a: Architecture){
+  pendingArch=null;
+  $("archConfirm").hidden=true;
   arch=a;
   $("strLabel").textContent=archText("文件名字符串（生成时自动 pushstr 压栈，文件名参数传 'rsp'）");
   $("strLabel2").textContent=archText("第二个文件名字符串（新名字：先 pushstr 再 mov r13, rsp 保存，第二个文件名参数传 'r13'）");
@@ -2085,6 +2098,8 @@ function setArch(a: Architecture){
 }
 $("archAmd").addEventListener("click",function(){setArch("amd64");});
 $("archI386").addEventListener("click",function(){setArch("i386");});
+$("archConfirmYes").addEventListener("click",function(){ if(pendingArch) doSetArch(pendingArch); });
+$("archConfirmNo").addEventListener("click",function(){ pendingArch=null; $("archConfirm").hidden=true; });
 
 
 // A local display preference; generation does not depend on storage availability.

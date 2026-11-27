@@ -98,6 +98,13 @@ python3 exploit.py REMOTE HOST=127.0.0.1 PORT=1337</pre><p class="foot">127.0.0.
       <button id="archAmd" class="on">amd64 · syscall</button>
       <button id="archI386">i386 · int 0x80</button>
     </div>
+    <div id="archConfirm" class="arch-confirm" hidden>
+      <p>切换架构会清空当前调用链（链只属于一个架构）。要继续吗？</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="archConfirmYes">继续切换</button>
+        <button class="btn btn-ghost" id="archConfirmNo">取消</button>
+      </div>
+    </div>
     <p class="sub" id="subLine"><code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9（第 4 个参数是 r10，不是 rcx）</p>
     <label class="flabel" for="q">调用名或调用号</label>
     <div class="search-wrap">

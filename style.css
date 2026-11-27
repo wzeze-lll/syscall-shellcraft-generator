@@ -138,6 +138,9 @@ pre.code { margin: 0; padding: 17px 16px; background: var(--code-bg); color: var
 .btn-ghost { border-color: var(--line); background: var(--card); color: var(--text); }
 .btn-ghost:hover { background: var(--card2); }
 .btn-row .btn { flex-shrink: 0; }
+.arch-confirm { margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--card2); }
+.arch-confirm p { margin: 0 0 10px; font-size: 13px; }
+.arch-confirm .btn-row { margin-top: 0; }
 .warn { display: none; color: var(--warn-text); background: var(--warn-bg); border-left: 2px solid currentColor; padding: 10px 12px; margin-top: 12px; font-size: 12px; border-radius: 0 3px 3px 0; overflow-wrap: anywhere; }
 .warn.show { display: block; }
 .foot { font-size: 11px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }

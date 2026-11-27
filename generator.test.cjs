@@ -8,8 +8,9 @@ const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 function load(script = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8'), initialize = false) {
   const nodes = new Map();
   function node(id) {
-    if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', innerHTML: '', style: {},
-      classList: { add(){}, remove(){}, toggle(){} }, addEventListener(){},
+    if (!nodes.has(id)) nodes.set(id, { value: '', textContent: '', innerHTML: '', style: {}, hidden: false,
+      classList: { add(){}, remove(){}, toggle(){} },
+      addEventListener(type, fn){ (this._listeners || (this._listeners = {}))[type] = fn; },
       querySelectorAll(){ return []; }, scrollIntoView(){} });
     return nodes.get(id);
   }
@@ -244,4 +245,37 @@ test('EXP required fields reject empty values instead of silently defaulting', (
   assert.throws(() => c.generateExp('plt', {...expFixture(c,'plt'), command:''}), /不能为空/);
   assert.throws(() => c.generateExp('csu', {...expFixture(c,'csu'), indirectSymbol:''}), /不能为空/);
   assert.throws(() => c.generateExp('nope', expFixture(c,'win')), /未知/);
+});
+
+test('architecture switch with a non-empty chain asks in-page before clearing', () => {
+  const c=load();
+  c.chain.push({name:'write',nr:1,code:'x',rax:'1'});
+  c.setArch('i386');
+  assert.equal(c.arch,'amd64','asking must not switch yet');
+  assert.equal(c.chain.length,1,'asking must keep the chain');
+  assert.equal(c.node('archConfirm').hidden,false,'confirm bar must show');
+  assert.equal(c.pendingArch,'i386');
+  assert.match(html,/id="archConfirm"[^>]*hidden/,'confirm bar is hidden by default');
+  assert.match(html,/切换架构会清空当前调用链（链只属于一个架构）。要继续吗？/);
+  c.node('archConfirmNo')._listeners.click();
+  assert.equal(c.node('archConfirm').hidden,true,'cancel hides the bar');
+  assert.equal(c.pendingArch,null);
+  assert.equal(c.arch,'amd64','cancel keeps the architecture');
+  assert.equal(c.chain.length,1,'cancel keeps the chain');
+  c.setArch('i386');
+  assert.equal(c.node('archConfirm').hidden,false,'second ask shows the bar again');
+  c.node('archConfirmYes')._listeners.click();
+  assert.equal(c.arch,'i386','accept switches the architecture');
+  assert.equal(c.chain.length,0,'accept clears the chain');
+  assert.equal(c.node('archConfirm').hidden,true,'accept hides the bar');
+  c.setArch('amd64');
+  assert.equal(c.arch,'amd64','empty chain switches immediately');
+  assert.equal(c.node('archConfirm').hidden,true,'empty chain shows no bar');
+  assert.equal(c.node('subLine').innerHTML.includes('第 4 个参数是 r10，不是 rcx'),true);
+});
+test('no native confirm() remains in the built output', () => {
+  const js=fs.readFileSync(path.join(__dirname,'app.js'),'utf8');
+  assert.doesNotMatch(js,/[^a-zA-Z]confirm\(/);
+  assert.ok(js.includes('archConfirmYes'));
+  assert.ok(js.includes('doSetArch'));
 });
