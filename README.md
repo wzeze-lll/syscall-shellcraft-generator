@@ -54,7 +54,7 @@
 | 4.1a | amd64 | `read → BSS → execve` 的 amd64 版本 |
 | 4.2a | amd64 | 写入 `/bin/sh → execve` 的 amd64 版本 |
 
-填写输入到返回地址的 offset、可写地址和对应 gadget 后，页面按模板生成代码。支持组合 pop 与单 pop 的选择，并提供两阶段发送延迟、NUL 字节数量提示和核对清单。
+填写输入到返回地址的 offset、可写地址和对应 gadget 后，页面按模板生成代码。支持组合 pop 与单 pop 的选择，并提供两阶段可选延时、NUL 字节数量提示和核对清单。gets 与 strcpy 分别选择：gets 按换行结束，生成时补换行并检查载荷中的换行字节；strcpy 按 NUL 终止。单次 read 可能短读，延时不能代替协议同步。字符串按 UTF-8 编码后分块。
 
 示例地址和 `0` 占位值需要按当前 ELF 替换。4.2 中保留的示例 gadget 地址未获动态验证；生成结果按 **STATIC_ONLY** 使用，不能据此认定已在某道题目中跑通。
 
@@ -71,8 +71,19 @@
 ```text
 syscall-shellcraft-generator/
 ├── index.html   # 界面、调用表、参数提示与代码生成逻辑
-└── README.md    # 项目介绍与使用说明
+├── README.md    # 项目介绍与使用说明
+└── generator.test.cjs  # 生成逻辑回归检查
 ```
+
+## 开发检查
+
+需要支持 `node:test` 的 Node.js 和 Python 3：
+
+```bash
+node --test generator.test.cjs
+```
+
+检查覆盖 UTF-8 分块、输入终止条件提示、十六进制精确查找、五种 ROP 模板在不同输入方式下的 Python 语法与发送方式，以及部分核心 ABI 映射。测试在最小 DOM 替身中运行生成逻辑，并不启动题目进程，也不代表真实题目利用通过。
 
 ## 对照资料
 
@@ -82,3 +93,5 @@ syscall-shellcraft-generator/
 - [pwntools：shellcraft 文档](https://docs.pwntools.com/en/stable/shellcraft.html)
 
 结合具体题目阅读与复盘，可查看 [CTF-Writeups](https://github.com/wzeze-lll/CTF-Writeups) 中的逆向、栈、堆和内核题目。
+
+输入行为对照：[gets(3)](https://man7.org/linux/man-pages/man3/gets.3.html)、[strcpy(3)](https://man7.org/linux/man-pages/man3/strcpy.3.html)、[read(2)](https://man7.org/linux/man-pages/man2/read.2.html)。
