@@ -212,3 +212,36 @@ print('receive/send boundary checks passed')
   const result=spawnSync('python3',['-c',program],{input:JSON.stringify(scripts),encoding:'utf8'});
   assert.equal(result.status,0,result.stdout+'\n'+result.stderr);
 });
+
+test('ELF profile import exists in the built app.js and round-trips', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
+  for (const name of ['parseElfProfile', 'applyElfProfile', 'expProfileApply']) assert.ok(src.includes(name), name + ' missing from built app.js');
+  assert.ok(src.includes('expProfileApply").addEventListener'), 'expProfileApply listener missing from built app.js');
+  const c = load();
+  const sample = {format:'pwnworkbench.elf.v1', binary:'./pwn', arch:'amd64', sha256:'a'.repeat(64),
+    security:{pie:true, canary:false, nx:true, relro:'Full'},
+    functions:['win','puts'], plt:['puts','system'], got:['puts']};
+  const text = JSON.stringify(JSON.stringify(sample));
+  const parsed = vm.runInContext('parseElfProfile(' + text + ')', c);
+  assert.equal(parsed.binary, './pwn');
+  assert.equal(parsed.arch, 'amd64');
+  assert.equal(parsed.security.relro, 'Full');
+  assert.throws(() => vm.runInContext('parseElfProfile(' + JSON.stringify(JSON.stringify({...sample, arch:'arm'})) + ')', c), /不支持/);
+  c.node('exp-field-reentry').value = 'main';
+  c.node('exp-field-target').value = 'win';
+  vm.runInContext('applyElfProfile(parseElfProfile(' + text + '))', c);
+  assert.equal(c.node('expBinary').value, './pwn');
+  assert.equal(c.node('expArch').value, 'amd64');
+  assert.match(c.node('expProfileStatus').textContent, /PIE 开/);
+});
+test('EXP required fields reject empty values instead of silently defaulting', () => {
+  const c = load();
+  assert.throws(() => c.generateExp('win', {...expFixture(c,'win'), target:''}), /不能为空/);
+  assert.throws(() => c.generateExp('win', {...expFixture(c,'win'), reentry:''}), /不能为空/);
+  assert.throws(() => c.generateExp('win', {...expFixture(c,'win'), binary:''}), /不能为空/);
+  assert.throws(() => c.generateExp('libc-puts', {...expFixture(c,'libc-puts'), leakSymbol:''}), /不能为空/);
+  assert.throws(() => c.generateExp('libc-puts', {...expFixture(c,'libc-puts'), libc:''}), /不能为空/);
+  assert.throws(() => c.generateExp('plt', {...expFixture(c,'plt'), command:''}), /不能为空/);
+  assert.throws(() => c.generateExp('csu', {...expFixture(c,'csu'), indirectSymbol:''}), /不能为空/);
+  assert.throws(() => c.generateExp('nope', expFixture(c,'win')), /未知/);
+});

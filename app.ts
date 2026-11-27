@@ -2057,6 +2057,7 @@ ropGen();
 // ===== 架构切换 =====
 function setArch(a: Architecture){
   if(arch===a) return;
+  if(chain.length>0 && !confirm("切换架构会清空当前调用链（链只属于一个架构）。要继续吗？")) return;
   arch=a;
   $("strLabel").textContent=archText("文件名字符串（生成时自动 pushstr 压栈，文件名参数传 'rsp'）");
   $("strLabel2").textContent=archText("第二个文件名字符串（新名字：先 pushstr 再 mov r13, rsp 保存，第二个文件名参数传 'r13'）");
@@ -2070,7 +2071,7 @@ function setArch(a: Architecture){
     $("tableNote").textContent="i386 表共 "+SYS32.length+" 条：NR 0\u2013386 段收录现代常用号，31 个历史号未收录（19 个无实现、12 个旧 ABI：oldstat/oldfstat/signal/sgetmask/ssetmask/uselib 等）（含 socketcall=102、ipc=117、select=142、poll=168、mmap2=192、truncate64/sendfile64、set_thread_area=243、359\u2013373 的 socket 独立调用、393\u2013402 的 SysV IPC 独立调用、403–423 的 time64 系列（32 位专用，如 clock_gettime64/futex_time64，415 除外），222、223、251、285、387–392、415 是未分配空号（共 11 个）；149 _sysctl、253 lookup_dcookie 有名无实现、调用只会返回 -ENOSYS，也未收录），NR 424 起为与 x64 共用的新调用、参数签名按同名 x64 调用复用，这一段使用前建议再用 man 确认。找不到就换英文名再试；切回 amd64 看完整表。";
     var n32=$("i386Note"); if(n32){ n32.innerHTML="<b>i386 已核对的易错点：</b>① socketcall(102) 是多路复用入口，子调用号 SYS_SOCKET=1 / BIND=2 / CONNECT=3 / LISTEN=4 / ACCEPT=5，第二个参数是指向参数数组的指针；新内核（4.3+）另有独立的 socket(359)/bind(361)/connect(362) 等号，可直接搜名字。② mmap2(192) 的最后一个参数 pgoff 单位是<b>页</b>（0x1000 字节），不是字节。③ ipc(117) 是 SysV IPC 多路复用入口（semget/msgget/shmget 走它），新内核也有独立号 393\u2013402。④ clone 的参数顺序和 amd64 不同：i386 是 flags / newsp / parent_tidptr / <b>tls / child_tidptr</b>（tls 第 4、child_tidptr 第 5，后两个和 amd64 反着——amd64 是 child_tidptr 第 4、tls 第 5），本页已按 i386 顺序收录。⑤ 同名 uid/gid 调用按名查找返回的是 *32 版号：getuid=199、getgid=200、geteuid=201、getegid=202、setuid=213、setgid=214（旧 16 位版号已从表里去掉，免得搜 getuid 跳出 24）。其余 i386 专属号（0\u2013386）已按 i386 表逐条核对，424 起共用号见上方说明。⑥ 403–423 是 32 位专用的 time64 系列（415 除外）（解决 2038 年问题的 64 位时间版）：参数顺序和同名普通版一样，只是时间结构体是 64 位的，搜 clock_gettime64 / futex_time64 / utimensat_time64 能直接找到；222、223、251、285、387–392、415 是未分配空号（共 11 个），没有对应调用。"; n32.classList.add("show"); }
   }else{
-    $("subLine").innerHTML="<code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9";
+    $("subLine").innerHTML="<code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9（第 4 个参数是 r10，不是 rcx）";
     $("tableNote").textContent="已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。";
     var n64=$("i386Note"); if(n64){ n64.classList.remove("show"); n64.innerHTML=""; }
   }

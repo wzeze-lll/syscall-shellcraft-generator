@@ -7,7 +7,6 @@
 <link rel="icon" href="data:,">
 <title>PwnWorkbench · PWN 脚本工作台</title>
 <meta name="description" content="PwnWorkbench：结合 ELF 信息与函数线索生成独立 pwntools 脚本，提供 ROP 模板、系统调用和 shellcraft 查表。">
-<meta name="description" content="Linux amd64 / i386 系统调用速查，shellcraft 调用链与 ROP 模板。">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -33,7 +32,7 @@
       <div class="sidebar-note"><span class="mono">Linux / x86</span><p>amd64 · i386<br>在浏览器中生成代码</p></div>
     </aside>
     <main class="workspace">
-      <div class="page-heading"><p class="eyebrow">LINUX / X86 REFERENCE</p><h1>PWN 脚本工作台</h1><p>从函数和输入条件出发，写好每一段链。</p></div>
+      <div class="page-heading"><p class="eyebrow">LINUX / X86 REFERENCE</p><h1>PWN 脚本工作台</h1><p>从函数和输入条件出发，写好每一段链。</p><p class="intro">写 PWN 的 exp 时，查系统调用号、记参数顺序和走哪个寄存器、拼 shellcraft 调用链、拼 ROP 链，都要翻 man、翻表、翻笔记。这个页面把这些事收到一处：选架构 → 搜调用 → 按提示填参数 → 生成能粘进 exp 的 pwntools 代码骨架，填实参数、回 VM 对真题跑通才算数，seccomp 白名单检查和 ROP 链模板也在同一页。</p></div>
 
   <section class="card exp-workspace" id="exp">
     <div class="section-head"><h2>EXP 脚本</h2><span class="section-index">01 / BUILD</span></div>
@@ -99,7 +98,7 @@ python3 exploit.py REMOTE HOST=127.0.0.1 PORT=1337</pre><p class="foot">127.0.0.
       <button id="archAmd" class="on">amd64 · syscall</button>
       <button id="archI386">i386 · int 0x80</button>
     </div>
-    <p class="sub" id="subLine"><code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9</p>
+    <p class="sub" id="subLine"><code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9（第 4 个参数是 r10，不是 rcx）</p>
     <label class="flabel" for="q">调用名或调用号</label>
     <div class="search-wrap">
       <input type="search" id="q" placeholder="搜索调用名、十进制或十六进制调用号…" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -284,7 +283,7 @@ python3 exploit.py REMOTE HOST=127.0.0.1 PORT=1337</pre><p class="foot">127.0.0.
     <p class="foot">没有 pop3 只有单个 pop 的回退：别硬套模板，拆成单个 pop 逐个设寄存器。i386 read(0, bss, len)：pop eax;ret→3、pop ebx;ret→0、pop ecx;ret→bss、pop edx;ret→len，再 int 0x80；execve(bss, 0, 0)：pop eax;ret→11、pop ebx;ret→bss、pop ecx;ret→0、pop edx;ret→0，再 int 0x80。amd64 read(0, bss, len)：pop rax;ret→0、pop rdi;ret→0、pop rsi;ret→bss、pop rdx;ret→len，再 syscall；execve(bss, 0, 0)：pop rax;ret→59、pop rdi;ret→bss、pop rsi;ret→0、pop rdx;ret→0，再 syscall。单个 pop gadget 用 ROPgadget 按寄存器名分别找：<code>ROPgadget --binary ./prog | grep "pop rax"</code>、<code>ROPgadget --binary ./prog | grep "pop rdi"</code>、<code>ROPgadget --binary ./prog | grep "pop rsi"</code>、<code>ROPgadget --binary ./prog | grep "pop rdx"</code>。</p>
     </details>
     <details class="reference-note"><summary>运行前核对</summary>
-      <ul class="check-list"><li>offset 用 cyclic 实测；gadget 地址与可写内存以当前 ELF 为准。</li><li>核对 gadget 弹栈顺序、字符串结尾 NUL 和目标输入的终止条件。</li><li>两阶段发送按目标协议同步，sleep 不能保证读入边界。</li><li>模板与示例地址未经实际题目运行验证，请在目标环境中调试。</li></ul>
+      <ul class="check-list"><li>offset 用 cyclic 实测；gadget 地址与可写内存以当前 ELF 为准。</li><li>核对 gadget 弹栈顺序、字符串结尾 NUL 和目标输入的终止条件。</li><li>两阶段发送按目标协议同步，sleep 不能保证读入边界。</li><li>模板与示例地址未经实际题目运行验证（STATIC_ONLY），请在目标环境中调试，回 VM 对真题跑通才算数。</li></ul>
     </details>
   </section>
 

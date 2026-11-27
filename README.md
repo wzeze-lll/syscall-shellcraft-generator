@@ -112,6 +112,8 @@ syscall-shellcraft-generator/
 ├── package.json        # 开发命令与固定版本的 TypeScript 依赖
 ├── package-lock.json   # 锁定开发依赖
 ├── generator.test.cjs  # 生成逻辑与页面资源回归检查
+├── inspect_elf.py      # 本地 ELF 检查：输出 pwnworkbench.elf.v1 检查结果 JSON
+├── requirements.txt    # inspect_elf.py 的依赖（pwntools）
 └── README.md
 ```
 
